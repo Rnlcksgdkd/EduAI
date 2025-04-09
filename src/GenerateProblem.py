@@ -212,6 +212,7 @@ def generate_problem_module():
     # StateGraph 생성
     builder = StateGraph(Structure.State)
 
+    # 문제 생성에 필요한 RAG 모듈 생성
     rag_graph = RagManager.rag_module()
 
     ## 노드 설정 ##
