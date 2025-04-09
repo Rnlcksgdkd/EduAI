@@ -21,7 +21,9 @@ class MultiChoiceQuestion(BaseModel):
     choice_2 : str = Field(description="두번째 선택지")
     choice_3 : str = Field(description="세번째 선택지")
     choice_4 : str = Field(description="네번째 선택지")
-    answer : str = Field(description="문제 해설 간결하게")
+    answer : int = Field(description="몇 번 선택지가 정답인지")
+    solution : int = Field(description="문제에 대한 해설을 명확하고 간결하게 설명해주세요")
+    
     difficulty : Literal['하', '중', '상']  = Field(description=
                              """
                             "문제 난이도\n"
@@ -29,7 +31,23 @@ class MultiChoiceQuestion(BaseModel):
                             "- 중: 기본 개념을 이해하고 상황에 맞게 적용 가능"
                             "- 상: 복합적인 사고/추론/적용 필요""")
                     
+
+
+class ragState(TypedDict):
     
+    file_path : str  # RAG 문서 경로
+    query : str # 검색 쿼리
+    
+    ## RAG 관련 ##
+    input_docu : str
+    use_rag: bool  # RAG 사용 여부
+    rag_option : int 
+    context: str   # RAG에서 검색된 문맥 정보
+
+    ## 메세지 ##
+    messages: Annotated[list, add_messages]
+
+
     
 ## ✅ 1. 상태 정의 ##
 class State(TypedDict):
@@ -46,6 +64,10 @@ class State(TypedDict):
     topic : str
     difficulty: str
     num_question: int
+
+    input_file_path : str
+    rag_option : int
+
 
     ## RAG 관련 ##
     use_rag: bool  # RAG 사용 여부

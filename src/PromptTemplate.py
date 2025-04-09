@@ -11,6 +11,7 @@ Please respond in Korean.
 
 questionTemplate = """
 Please Create {num_question} questions with four options (A–D), the correct answer, and an explanation based on the conditions below:
+"If a CONTEXT value exists, please generate questions based on its content."
 
 The output must be a single List(NOT JSON) containing JSON objects. Each object must conform to the JSON schema provided below. 
 Do not output separate JSON objects or any extra text outside of this single list
@@ -18,9 +19,11 @@ AND do not use Code Block!
 
 Exam Name: {exam_name}
 Topic : {topic}
-
+CONTEXT : {context}
 FORMAT :
 {format}
+
+
 """
 
 standard_prompt_template = ChatPromptTemplate.from_messages([

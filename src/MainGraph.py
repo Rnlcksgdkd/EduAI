@@ -12,6 +12,7 @@ from langchain_core.runnables import RunnableLambda, RunnableMap, RunnableConfig
 from langchain_core.prompts import ChatPromptTemplate
 import ast
 from IPython.display import Image, display
+from dotenv import load_dotenv
 
 
 # RAG 관련 모듈 추가

@@ -61,12 +61,18 @@ def decide_attr_random(attr):
 # ✅ 1). RAG 컨텍스트 검색 노드
 def retrieve_context(state):
     
+    input_file_path = state.get('input_file_path')
+    rag_option = state.get('rag_option')
+    query = state.get('query' , "전체범위")
+    
+    print(input_file_path)
+    
     # difficulty = state.get('difficulty', decide_attr_random('difficulty'))
     
     
     # """RAG를 사용하여 관련 문서를 검색하고 문맥을 추가"""
     # if state.get("use_rag", False):
-    return {"context": "", "use_rag": False ,
+    return {"context": "", "use_rag": False ,'rag_option' : 5 , 
             'node_name' : NODE_RAG ,  'graph_flow' : (state.get('graph_flow', []) + [NODE_RAG]) }
     
     
@@ -82,6 +88,11 @@ def problem_generate_prompt(state):
     use_rag = state.get("use_rag", False)
     context = state.get("context", "")
 
+
+    print(num_question)
+    print(state.get('num_question'))
+    print(state.get('input_file_path'))
+    
     parser = PydanticOutputParser(pydantic_object=Structure.MultiChoiceQuestion)
     
     # RAG 사용 여부에 따라 프롬프트 템플릿 선택 (추후)
@@ -89,6 +100,7 @@ def problem_generate_prompt(state):
         exam_name=exam_name,
         topic = topic,
         # difficulty = difficulty,
+        context = context,
         num_question=num_question,
         format=parser.get_format_instructions()
     )
@@ -170,21 +182,50 @@ def save_result(state):
         print(f"✅ JSON 파일 저장 완료: {file_name}")    
         return {'node_name' : NODE_SAVE_RESULT} 
 
+def test_node(state):
+    input_file_path = state.get('input_file_path')
+    rag_option = state.get('rag_option')
+    query = state.get('query' , "전체범위")
+    
+    print(input_file_path , rag_option , query)
+    return {'rag_option' : 5 }
+
+
+def retrieve_rag(state , rag_module):
+    
+    input_file_path = state.get('input_file_path')
+    rag_option = state.get('rag_option')
+    topic = state.get('topic' , "전체범위")
+    
+    response = rag_module.invoke({  'file_path' : input_file_path  , 'rag_option' : rag_option , 'query' : topic })
+    
+    print("#"*100)
+    print(response)
+    # 서브그래프 응답을 부모 상태로 변환
+    return {"context": response["context"]}
+
+    
+    
 
 def generate_problem_module():
 
     # StateGraph 생성
     builder = StateGraph(Structure.State)
 
+    rag_graph = RagManager.rag_module()
+
     ## 노드 설정 ##
-    builder.add_node( NODE_RAG, retrieve_context)       
+    builder.add_node( NODE_RAG, RunnableLambda(lambda state: retrieve_rag(state , rag_graph)))       
     builder.add_node( NODE_PROMPT , problem_generate_prompt)        
     builder.add_node( NODE_GENERATE , generate_problem)      
     builder.add_node( NODE_SAVE_RESULT , save_result)           
 
     ## 엣지 설정 ##
-    builder.set_entry_point(NODE_RAG)
+    # builder.set_entry_point(NODE_RAG)
+    builder.add_edge(START, NODE_RAG)
     builder.add_edge(NODE_RAG, NODE_PROMPT)
+    # builder.add_edge(NODE_PROMPT, END)
+    
     builder.add_edge(NODE_PROMPT, NODE_GENERATE)
     builder.add_edge(NODE_GENERATE, NODE_SAVE_RESULT)
     builder.add_edge(NODE_SAVE_RESULT, END)
@@ -203,17 +244,30 @@ if __name__ == "__main__":
     ## .env 파일 로드
     load_dotenv('./.env')
         
+        
+    ##################### 사용자 입력 #####################
     # 모델 선택
     model_manager = ModelManager(['gpt-4o-mini'])
-
+    input_file_path = '../docs/빅데이터분석기사.txt'
+    exam_name = "빅데이터분석기사"
+    topic = "머신러닝"
+    num_question = 10
+    use_rag = True
+    rag_option = 2
+    ######################################################
+    
+    
     # 입력 생성
     input_dict = {
     "models" : model_manager.models,
     "models_info" : model_manager.models_info,
-    "exam_name": "빅데이터분석기사",
-    "topic" : "" ,
-    "num_question": 10,
-    "use_rag": False
+    "input_file_path" : input_file_path , 
+    "exam_name" :  exam_name,
+    "topic" : topic,
+    'query' : topic,
+    "num_question": num_question,
+    "use_rag": use_rag,
+    'rag_option' : rag_option
     }
 
     # Config 설정
