@@ -1,0 +1,5 @@
+
+.env
+
+# local 모델들 제외
+models/

@@ -1,0 +1,122 @@
+[
+    {
+        "exam_name": "빅데이터분석기사",
+        "topic": "데이터 수집",
+        "num": 1,
+        "question": "데이터 수집 단계에서 가장 중요한 요소는 무엇인가?",
+        "choice_1": "데이터의 정확성",
+        "choice_2": "데이터의 양",
+        "choice_3": "데이터의 속도",
+        "choice_4": "데이터의 다양성",
+        "answer": "데이터의 정확성은 신뢰할 수 있는 분석 결과를 위해 가장 중요하다.",
+        "difficulty": "중"
+    },
+    {
+        "exam_name": "빅데이터분석기사",
+        "topic": "데이터 전처리",
+        "num": 2,
+        "question": "데이터 전처리에서 결측치를 처리하는 방법은 무엇인가?",
+        "choice_1": "제거",
+        "choice_2": "대체",
+        "choice_3": "무시",
+        "choice_4": "정규화",
+        "answer": "결측치를 대체하는 것은 데이터의 분석 품질을 높이는 데 중요하다.",
+        "difficulty": "중"
+    },
+    {
+        "exam_name": "빅데이터분석기사",
+        "topic": "데이터 분석",
+        "num": 3,
+        "question": "상관 분석이 가장 적합하게 사용되는 경우는?",
+        "choice_1": "두 변수 간의 관계를 파악할 때",
+        "choice_2": "예측 모델을 구축할 때",
+        "choice_3": "클러스터링을 수행할 때",
+        "choice_4": "시계열 분석을 할 때",
+        "answer": "상관 분석은 두 변수 간의 관계를 파악하는 데 적합하다.",
+        "difficulty": "중"
+    },
+    {
+        "exam_name": "빅데이터분석기사",
+        "topic": "기계 학습",
+        "num": 4,
+        "question": "지도 학습의 주요 특징은 무엇인가?",
+        "choice_1": "라벨이 없는 데이터 사용",
+        "choice_2": "라벨이 있는 데이터 사용",
+        "choice_3": "보상 기반 학습",
+        "choice_4": "자율 학습",
+        "answer": "지도 학습은 라벨이 있는 데이터를 사용하여 학습한다.",
+        "difficulty": "중"
+    },
+    {
+        "exam_name": "빅데이터분석기사",
+        "topic": "빅데이터 기술",
+        "num": 5,
+        "question": "Hadoop의 기본 구성 요소는 무엇인가?",
+        "choice_1": "Hadoop Common",
+        "choice_2": "Hadoop Distributed File System(HDFS)",
+        "choice_3": "Hadoop YARN",
+        "choice_4": "모두 정답",
+        "answer": "모두 정답이다. 이 세 가지는 Hadoop의 기본 구성 요소이다.",
+        "difficulty": "하"
+    },
+    {
+        "exam_name": "빅데이터분석기사",
+        "topic": "데이터 시각화",
+        "num": 6,
+        "question": "데이터 시각화에서 가장 효과적인 차트 유형은 무엇인가?",
+        "choice_1": "막대 차트",
+        "choice_2": "선 차트",
+        "choice_3": "파이 차트",
+        "choice_4": "산점도",
+        "answer": "데이터의 분포와 관계를 보여주는 산점도가 효과적일 수 있다.",
+        "difficulty": "중"
+    },
+    {
+        "exam_name": "빅데이터분석기사",
+        "topic": "데이터베이스",
+        "num": 7,
+        "question": "관계형 데이터베이스의 주요 특징은 무엇인가?",
+        "choice_1": "데이터의 비정형성",
+        "choice_2": "데이터 간의 관계 명시",
+        "choice_3": "데이터의 중복성",
+        "choice_4": "비관계형 데이터 처리",
+        "answer": "관계형 데이터베이스는 데이터 간의 관계를 명시적으로 정의한다.",
+        "difficulty": "중"
+    },
+    {
+        "exam_name": "빅데이터분석기사",
+        "topic": "클라우드 컴퓨팅",
+        "num": 8,
+        "question": "클라우드 컴퓨팅의 주요 이점은 무엇인가?",
+        "choice_1": "비용 효율성",
+        "choice_2": "보안성 향상",
+        "choice_3": "복잡도 증가",
+        "choice_4": "물리적 공간 확보",
+        "answer": "비용 효율성이 클라우드 컴퓨팅의 주요 이점 중 하나이다.",
+        "difficulty": "하"
+    },
+    {
+        "exam_name": "빅데이터분석기사",
+        "topic": "인공지능",
+        "num": 9,
+        "question": "인공지능의 기본 원리는 무엇인가?",
+        "choice_1": "기계의 사고능력",
+        "choice_2": "데이터의 패턴 인식",
+        "choice_3": "인간의 감정 모사",
+        "choice_4": "자율적 의사결정",
+        "answer": "데이터의 패턴을 인식하고 그것을 기반으로 행동하는 것이 인공지능의 기본 원리이다.",
+        "difficulty": "중"
+    },
+    {
+        "exam_name": "빅데이터분석기사",
+        "topic": "데이터 분석 도구",
+        "num": 10,
+        "question": "다음 중 데이터 분석에 가장 많이 사용되는 도구는 무엇인가?",
+        "choice_1": "Excel",
+        "choice_2": "Photoshop",
+        "choice_3": "PowerPoint",
+        "choice_4": "Word",
+        "answer": "Excel은 데이터 분석과 각종 수치 계산에 널리 사용된다.",
+        "difficulty": "하"
+    }
+]

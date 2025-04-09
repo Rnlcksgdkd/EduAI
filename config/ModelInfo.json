@@ -1,0 +1,98 @@
+{
+
+    "gemma3-4b" :{
+        "Company" : "local"
+    } ,
+
+    "gpt-3.5-turbo": {
+        "Company": "OpenAI",
+        "Input": 0.5,
+        "Output": 1.5,
+        "Input (Ratio)": 1.0,
+        "Output (Ratio)": 1.0
+    },
+    "gpt-4-turbo": {
+        "Company": "OpenAI",
+        "Input": 10.0,
+        "Output": 30.0,
+        "Input (Ratio)": 20.0,
+        "Output (Ratio)": 20.0
+    },
+    "o1": {
+        "Company": "OpenAI",
+        "Input": 15.0,
+        "Output": 60.0,
+        "Input (Ratio)": 30.0,
+        "Output (Ratio)": 40.0
+    },
+    "o3-mini": {
+        "Company": "OpenAI",
+        "Input": 1.1,
+        "Output": 4.4,
+        "Input (Ratio)": 2.2,
+        "Output (Ratio)": 2.9333333333333336
+    },
+    "gpt-4o": {
+        "Company": "OpenAI",
+        "Input": 2.5,
+        "Output": 10.0,
+        "Input (Ratio)": 5.0,
+        "Output (Ratio)": 6.666666666666667
+    },
+    "gpt-4o-mini": {
+        "Company": "OpenAI",
+        "Input": 0.15,
+        "Output": 0.6,
+        "Input (Ratio)": 0.3,
+        "Output (Ratio)": 0.39999999999999997
+    },
+    "gpt-4.5": {
+        "Company": "OpenAI",
+        "Input": 75.0,
+        "Output": 150.0,
+        "Input (Ratio)": 150.0,
+        "Output (Ratio)": 100.0
+    },
+    "claude-3-7-sonnet-20250219": {
+        "Company": "Anthropic",
+        "Input": 3.0,
+        "Output": 15.0,
+        "Input (Ratio)": 6.0,
+        "Output (Ratio)": 10.0
+    },
+    "claude-3-5-haiku-20241022": {
+        "Company": "Anthropic",
+        "Input": 0.8,
+        "Output": 4.0,
+        "Input (Ratio)": 1.6,
+        "Output (Ratio)": 2.6666666666666665
+    },
+    "claude-3-opus-20240229": {
+        "Company": "Anthropic",
+        "Input": 15.0,
+        "Output": 75.0,
+        "Input (Ratio)": 30.0,
+        "Output (Ratio)": 50.0
+    },
+    "sonar-reasoning-pro": {
+        "Company": "Perplexity",
+        "Input": 2.0,
+        "Output": 8.0,
+        "Input (Ratio)": 4.0,
+        "Output (Ratio)": 5.333333333333333
+    },
+    "sonar-reasoning": {
+        "Company": "Perplexity",
+        "Input": 1.0,
+        "Output": 5.0,
+        "Input (Ratio)": 2.0,
+        "Output (Ratio)": 3.3333333333333335
+    },
+    "sonar-pro": {
+        "Company": "Perplexity",
+        "Input": 3.0,
+        "Output": 15.0,
+        "Input (Ratio)": 6.0,
+        "Output (Ratio)": 10.0
+    }
+}
