@@ -54,56 +54,79 @@ docs_path = os.path.join(os.path.dirname(__file__), '..', 'docs')
 docs_path = os.path.abspath(docs_path)
 
 
+## 문서 종류에 따라 조건분기 함수 
 def docu_routing(state):
     
-    file_path = state.get('file_path' , None)
+    ''' 문서 종류에 따라 조건분기 함수 '''
     
-    if file_path == None:
-        return None
+    file_path = state.get('file_path' , None)       # 파일 경로
     
-    file_ext = file_path.split('.')[-1] 
+    if file_path == None: return 'None'
     
+    file_ext = file_path.split('.')[-1]             # 파일 확장자
+    
+    # pdf , txt , pptx 파일만 처리
     if file_ext in ['pdf' , 'txt' , 'pptx']:
         return file_ext
     
-    return None
+    # 다른 파일 형식은 None 반환 (RAG 적용 x)
+    return 'None'
+
 
 # pdf 파일 로더
 def load_pdf_docu(state):
     
-    """
-    PDF 파일을 LangChain 문서 객체로 로드합니다
-    """
+    """ PDF 파일 로더 """
     
     file_path = state.get('file_path')
+    return {'input_docu' : load_pdf_docu_path(file_path)}
+
+
+def load_pdf_docu_path(file_path):
+    
+    """ PDF 파일 로더 """
+    
     loader = PyPDFLoader(file_path)
     documents = loader.load()
     
-    return {'input_docu' : documents[0].page_content }
+    return documents
 
-# txt 파일 로더
+
+# txt 파일 로더 >> 
 def load_txt_docu(state):
+    
+    """ TXT 파일 로더 """
     
     file_path = state.get('file_path')
     
     try:
         loader = TextLoader(file_path, encoding='utf-8')
-        documents = loader.load()
-        return {'input_docu' : documents }
+        docu = loader.load() 
+        return {'input_docu' : loader.load() }
     
     except UnicodeDecodeError:
         loader = TextLoader(file_path, encoding='cp949')  # 한글 윈도우 인코딩
-        documents = loader.load()
-        return {'input_docu' : documents }
+        return {'input_docu' : loader.load() }
+
 
 # pptx 파일 로더
 def load_pptx_docu(state):
+    
+    """ PPTX 파일 로더 """
     pass
+
+
+def print_pdf_docs(docs):
+    
+    for page in range(docs[0].metadata['total_pages']):
+        print(f"--- 페이지 {page + 1}")
+        print(docs[page].page_content)
 
 
 class RAGManager:
     
     def __init__(self, docs_dir=docs_path):
+        
         self.docs_dir = docs_dir
         self.embeddings = OpenAIEmbeddings()
         self.vector_store = None
@@ -143,7 +166,18 @@ class RAGManager:
         return context
 
 
+## docs 를 문자열로 반환
+def docs2str(docs):
+    
+    doc_str = ""
+    for i , doc in enumerate(docs):
+        doc_str += f"------ 페이지 {i + 1} -------\n"
+        doc_str += doc.page_content + "\n\n"
+
+    return doc_str
+
 def rag_2(input_docu , query):
+    
     rag_manager = RAGManager()
     rag_manager.load_and_process_documents(input_docu)
     relevant_docs = rag_manager.get_relevant_documents(query)
@@ -154,6 +188,7 @@ def rag_2(input_docu , query):
         print(doc.page_content)
     
     context = rag_manager.get_context_str(relevant_docs)
+    
     return context
 
 
@@ -167,7 +202,7 @@ def rag_query(state):
         case 0:
             pass
         case 1:
-            context = input_docu[0].page_content 
+            context = docs2str(input_docu)
         case 2:
             context = rag_2(input_docu , query)
         case 3:
@@ -200,7 +235,7 @@ def rag_module():
     builder.add_conditional_edges( START, docu_routing ,
         { 'pdf' : 'Load_PDF',
            'txt' : 'Load_TXT',
-           'pptx' : 'Load_PPT' , None : END }
+           'pptx' : 'Load_PPT' , 'None' : END }
     )
 
 
@@ -212,33 +247,20 @@ def rag_module():
     # 그래프 컴파일
     app = builder.compile(checkpointer = MemorySaver())
     
-    img_txt = app.get_graph().draw_mermaid()
-    print(img_txt)
+    # img_txt = app.get_graph().draw_mermaid()
+    # print(img_txt)
+    
     # with open("RAG_Graph.png", "wb") as f:
     #     f.write(img.data)
         
     return app
 
 
-
-if __name__ == "__main__":
-    
-    ## .env 파일 로드
-    load_dotenv('../.env')
-
-
-    # TXT 로더 테스트
-    txt_file_path = '../docs/빅데이터분석기사.txt'
-    # test_docu = load_txt_docu(test_file_path)
-    # print(test_docu[0].page_content)
-    
+def exec_rag(input_dict):
     
     RAG_graph = rag_module()
     
-    # RAG_graph.stream({'file_path' : txt_file_path })
-    
-    
-        # Config 설정
+    # Config 설정
     config = RunnableConfig(
         recursion_limit=10,  # 최대 10개의 노드까지 방문. 그 이상은 RecursionError 발생
         configurable={"thread_id": "7"},  # 스레드 ID 설정
@@ -248,11 +270,41 @@ if __name__ == "__main__":
     event_list = []
     
     # Graph 실행
-    for event in RAG_graph.stream(input = {'file_path' : txt_file_path  , 'rag_option' : 2 , 'query' : '데이터 전처리'} , config=config):
-        # print('='*100)
-        # print(event)
-        
+    for event in RAG_graph.stream(input =  input_dict, config=config):
         event_list.append(event)
+        
+    return event_list
+
+
+if __name__ == "__main__":
+    
+    ## .env 파일 로드
+    load_dotenv('../.env')
+
+
+    ### 1). TXT 로더 테스트 ###
+    txt_file_path = '../docs/빅데이터분석기사.txt'
+    # test_docu = load_txt_docu(test_file_path)
+    # print(test_docu[0].page_content)
+    
+    
+    ### 2). PDF 로더 테스트 ###
+    pdf_file_path_1 = '../docs/2024 내일은 빅데이터분석기사 필기 핵심 요약집.pdf'
+    pdf_file_path_2 = '../docs/온디바이스 AI 기술동향 및 발전방향.pdf'
+    
+    docs = load_pdf_docu_path(pdf_file_path_2)
+    print_pdf_docs(docs)
+    
+    
+    ### 3). 텍스트 통채로 프롬프트에 전달 (RAG 옵션 1) ###
+    input_dict = {'file_path' : pdf_file_path_2  , 'rag_option' : 1 , 'query' : '데이터 전처리'}
+    exec_rag(input_dict)
+
+
+
+    ### 4). RAG 옵션2 테스트 ###
+    
+
     
     
     # # RAG 매니저 인스턴스 생성

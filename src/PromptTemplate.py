@@ -17,7 +17,7 @@ The output must be a single List(NOT JSON) containing JSON objects. Each object 
 Do not output separate JSON objects or any extra text outside of this single list
 AND do not use Code Block!
 
-Exam Name: {exam_name}
+Exam Title: {title}
 Topic : {topic}
 CONTEXT : {context}
 FORMAT :

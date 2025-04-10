@@ -1,0 +1,16 @@
+Introduction||What is DDP||Single-Node Multi-GPU Training||Fault Tolerance||Multi-Node training||minGPT TrainingWhat is Distributed Data Parallel (DDP)¶Authors:Suraj SubramanianWhat you will learnHow DDP works under the hoodWhat isDistributedSamplerHow gradients are synchronized across GPUsPrerequisitesFamiliarity withbasic non-distributed trainingin PyTorchFollow along with the video below or onyoutube.This tutorial is a gentle introduction to PyTorchDistributedDataParallel(DDP)
+which enables data parallel training in PyTorch. Data parallelism is a way to
+process multiple data batches across multiple devices simultaneously
+to achieve better performance. In PyTorch, theDistributedSamplerensures each device gets a non-overlapping input batch. The model is replicated on all the devices;
+each replica calculates gradients and simultaneously synchronizes with the others using thering all-reduce
+algorithm.Thisillustrative tutorialprovides a more in-depth python view of the mechanics of DDP.Why you should prefer DDP overDataParallel(DP)¶DataParallelis an older approach to data parallelism. DP is trivially simple (with just one extra line of code) but it is much less performant.
+DDP improves upon the architecture in a few ways:DataParallelDistributedDataParallelMore overhead; model is replicated
+and destroyed at each forward passModel is replicated only
+onceOnly supports single-node parallelismSupports scaling to multiple
+machinesSlower; uses multithreading on a
+single process and runs into Global
+Interpreter Lock (GIL) contentionFaster (no GIL contention)
+because it uses
+multiprocessingFurther Reading¶Multi-GPU training with DDP(next tutorial in this series)DDP
+APIDDP Internal
+DesignDDP Mechanics Tutorial

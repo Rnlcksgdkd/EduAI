@@ -34,12 +34,11 @@ from ModelManager import ModelManager
 import PromptTemplate
 import RagManager
 import Structure
-
+import setting
 
 '''문제 생성 모듈'''
 
-generate_save_path = os.path.join(os.path.dirname(__file__), '..', 'generate')
-generate_save_path = os.path.abspath(generate_save_path)
+
 
 ########################
 ### 노드 이름 정의 ###
@@ -53,86 +52,86 @@ NODE_PROPER_VERIFY = 'Node_Proper_Verify'
 NODE_SAVE_RESULT = 'Node_Save_Result'
 
 
-def decide_attr_random(attr):
-    attr_values = get_args( Structure.MultiChoiceQuestion.__annotations__[attr])
-    return random.choice(attr_values)
+# def decide_attr_random(attr):
+#     attr_values = get_args( Structure.MultiChoiceQuestion.__annotations__[attr])
+#     return random.choice(attr_values)
 
 
-# ✅ 1). RAG 컨텍스트 검색 노드
-def retrieve_context(state):
+## 1). RAG 컨텍스트 검색 노드 ##
+def retrieve_rag(state , rag_module):
     
-    input_file_path = state.get('input_file_path')
-    rag_option = state.get('rag_option')
-    query = state.get('query' , "전체범위")
+    """ RAG 컨텍스트 검색 노드 """
+
+    # State 값 로드
+    input_file_path = state.get('input_file_path')  # 입력 레퍼런스 문서 경로
+    rag_option = state.get('rag_option')            # RAG 사용 옵션 = 0 : 사용안함 , 1: 입력문서 통채로 전달 , 2: 요청쿼리로 검색
+    topic = state.get('topic' , "전체범위")          # RAG 검색 쿼리 = 없다면 전체 범위에 대해 문제 생성
     
-    print(input_file_path)
+    # RAG 사용 안하는 경우는 context를 비워서 반환
+    if rag_option == 0 : return {'context' : ""}
     
-    # difficulty = state.get('difficulty', decide_attr_random('difficulty'))
-    
-    
-    # """RAG를 사용하여 관련 문서를 검색하고 문맥을 추가"""
-    # if state.get("use_rag", False):
-    return {"context": "", "use_rag": False ,'rag_option' : 5 , 
-            'node_name' : NODE_RAG ,  'graph_flow' : (state.get('graph_flow', []) + [NODE_RAG]) }
-    
+    # RAG - 서브그래프(src/RagManager.py) 호출
+    response = rag_module.invoke({  'file_path' : input_file_path  , 'rag_option' : rag_option , 'query' : topic })
     
     
-# ✅ 2). 프롬프트 노드
+    print(state['log_messages'])
+    
+    # RAG 서브그래프 응답 반환
+    return {"context": response["context"]}
+
+
+    
+## 2). 프롬프트 노드 ##
 def problem_generate_prompt(state):
     
-    # 필요한 변수 추출
-    exam_name = state.get("exam_name", "ADsP")
-    topic = state.get("topic", "범위 전체")
-    num_question = state.get('num_question', 3)
-    # difficulty = state.get("difficulty", "중")
-    use_rag = state.get("use_rag", False)
-    context = state.get("context", "")
-
-
-    print(num_question)
-    print(state.get('num_question'))
-    print(state.get('input_file_path'))
+    """ 문제 생성 프롬프트 노드 """
     
+    # State 값 로드
+    input_file_path = state.get('input_file_path')  # 입력 레퍼런스 문서 경로
+    file_name = input_file_path.split('/')[-1].split('.')[0] if input_file_path != None else None
+    print("## 테스트 1 : " , file_name)
+    title = state.get("title", file_name )  # 시험 이름 (없는 경우는 입력레퍼런스 파일이름)
+    topic = state.get("topic", "범위 전체")          # 범위 전체
+    num_question = state.get('num_question')        # 생성할 문제 수
+    context = state.get("context")                  # RAG에서 검색된 문맥 정보
+
+    # 생성할 문제 형식을 파서로 정의 (객관식 - 4지선다)
     parser = PydanticOutputParser(pydantic_object=Structure.MultiChoiceQuestion)
     
-    # RAG 사용 여부에 따라 프롬프트 템플릿 선택 (추후)
-    messages = PromptTemplate.standard_prompt_template.format_messages(
-        exam_name=exam_name,
+    # 문제 생성에 사용할 프롬프트 생성
+    prompt_messages = PromptTemplate.standard_prompt_template.format_messages(
+        title=title,
         topic = topic,
-        # difficulty = difficulty,
         context = context,
         num_question=num_question,
         format=parser.get_format_instructions()
     )
         
-    
-    # 메시지를 state에 추가
-    return {"messages" : messages , "prompt_message": messages , 'graph_flow' : (state.get('graph_flow', []) + [NODE_PROMPT]) , 'node_name' : NODE_PROMPT }
+    # State에 prompt_message 추가
+    return {"messages" : prompt_messages , "prompt_message": prompt_messages , 'graph_flow' : (state.get('graph_flow', []) + [NODE_PROMPT]) , 'node_name' : NODE_PROMPT }
 
+## ✅ 3. LLM 모델 응답 생성 노드 (병렬 처리) ##
+generate_problem = RunnableLambda(lambda state : build_parallel_model_map(state.get('models').keys()))
 
-
+# 병렬 처리를 위한 RunnableMap 리턴 함수 #
 def build_parallel_model_map(model_names):
+    
+    """ 병렬 처리로 모델 응답 생성 """
     
     return RunnableMap({
     "messages": lambda state: state["messages"],
     "model_response": RunnableMap({
         model_name: RunnableLambda(lambda state, m=model_name: generate_response(state, m)) for model_name in model_names
     }),
-    "exam_name": lambda state: state["exam_name"],
-    # "difficulty": lambda state: state["difficulty"],
+    "title": lambda state: state["title"],
     "num_question": lambda state: state["num_question"],
-    "use_rag": lambda state: state["use_rag"],
     "context": lambda state: state["context"],
     'graph_flow' : lambda state : (state.get('graph_flow', []) + [NODE_GENERATE]) ,
     'node_name' : lambda state : 'Node_Generate'
 })
 
 
-# ✅ 3. LLM 모델 응답 생성 노드 (병렬 처리)
-generate_problem = RunnableLambda(lambda state : build_parallel_model_map(state.get('models').keys()))
-
-
-# 모델별 응답 생성 함수
+# 개별 모델 응답 함수
 def generate_response(state, model_name):
 
     # 모델 로드
@@ -140,9 +139,6 @@ def generate_response(state, model_name):
     
     # LLM 응답 생성
     response = model.invoke(state["messages"])
-    
-    print("##### 테스트 ####")
-    print(response)
     
     # 인풋/아웃풋 토큰 가격 계산
     model_input_tokens = response.usage_metadata['input_tokens']
@@ -153,10 +149,6 @@ def generate_response(state, model_name):
     json_str = response.content
     str_question_lst = ast.literal_eval(json_str)
 
-    # question_lst = [MultiChoiceQuestion(**json) for json in str_question_lst]
-
-    print(str_question_lst)
-    
     return {'content': response.content, 'cost': response_price , 'questions' : str_question_lst }
 
 
@@ -174,7 +166,7 @@ def save_result(state):
         
         datetime_str = datetime.now().strftime("%Y%m%d_%H%M")
         
-        file_name = f"{generate_save_path}/{state['exam_name']}_{state['topic']}_{datetime_str}.json"
+        file_name = f"{setting.generate_save_path}/{state['title']}_{state['topic']}_{datetime_str}.json"
         
         with open(file_name, "w", encoding="utf-8") as f:
             json.dump(questions, f, ensure_ascii=False, indent=4)
@@ -182,32 +174,16 @@ def save_result(state):
         print(f"✅ JSON 파일 저장 완료: {file_name}")    
         return {'node_name' : NODE_SAVE_RESULT} 
 
-def test_node(state):
-    input_file_path = state.get('input_file_path')
-    rag_option = state.get('rag_option')
-    query = state.get('query' , "전체범위")
-    
-    print(input_file_path , rag_option , query)
-    return {'rag_option' : 5 }
 
 
-def retrieve_rag(state , rag_module):
-    
-    input_file_path = state.get('input_file_path')
-    rag_option = state.get('rag_option')
-    topic = state.get('topic' , "전체범위")
-    
-    response = rag_module.invoke({  'file_path' : input_file_path  , 'rag_option' : rag_option , 'query' : topic })
-    
-    print("#"*100)
-    print(response)
-    # 서브그래프 응답을 부모 상태로 변환
-    return {"context": response["context"]}
 
     
-    
-
+## 문제 생성 모듈 (Graph) ##
 def generate_problem_module():
+
+    """ 문제 생성 모듈
+    START >> NODE_RAG >> NODE_PROMPT >> NODE_GENERATE >> NODE_SAVE_RESULT >> END
+    """
 
     # StateGraph 생성
     builder = StateGraph(Structure.State)
@@ -222,16 +198,12 @@ def generate_problem_module():
     builder.add_node( NODE_SAVE_RESULT , save_result)           
 
     ## 엣지 설정 ##
-    # builder.set_entry_point(NODE_RAG)
     builder.add_edge(START, NODE_RAG)
     builder.add_edge(NODE_RAG, NODE_PROMPT)
-    # builder.add_edge(NODE_PROMPT, END)
-    
     builder.add_edge(NODE_PROMPT, NODE_GENERATE)
     builder.add_edge(NODE_GENERATE, NODE_SAVE_RESULT)
     builder.add_edge(NODE_SAVE_RESULT, END)
     
-
     # 그래프 컴파일
     app = builder.compile(checkpointer = MemorySaver())
     
@@ -245,16 +217,18 @@ if __name__ == "__main__":
     ## .env 파일 로드
     load_dotenv('./.env')
         
-        
+    '빅데이터분석기사.txt'
+    "온디바이스 AI 기술동향 및 발전방향"
+    "2024 내일은 빅데이터분석기사 필기 핵심 요약집"
+    
+    
     ##################### 사용자 입력 #####################
-    # 모델 선택
     model_manager = ModelManager(['gpt-4o-mini'])
     input_file_path = '../docs/빅데이터분석기사.txt'
-    exam_name = "빅데이터분석기사"
-    topic = "머신러닝"
-    num_question = 10
-    use_rag = True
-    rag_option = 2
+    title = "AI"
+    topic = ""
+    num_question = 5
+    rag_option = 1
     ######################################################
     
     
@@ -263,11 +237,9 @@ if __name__ == "__main__":
     "models" : model_manager.models,
     "models_info" : model_manager.models_info,
     "input_file_path" : input_file_path , 
-    "exam_name" :  exam_name,
+    "title" :  title,
     "topic" : topic,
-    'query' : topic,
     "num_question": num_question,
-    "use_rag": use_rag,
     'rag_option' : rag_option
     }
 
@@ -281,8 +253,9 @@ if __name__ == "__main__":
     # Graph 생성
     app = generate_problem_module()
     
-    # Event 저장 리스트
-    test_list = []
+
+    # # Event 저장 리스트
+    # test_list = []
     event_list = []
     
     # Graph 실행

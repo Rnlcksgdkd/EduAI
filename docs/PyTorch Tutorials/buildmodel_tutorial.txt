@@ -1,0 +1,72 @@
+참고Clickhereto download the full example code파이토치(PyTorch) 기본 익히기||빠른 시작||텐서(Tensor)||Dataset과 Dataloader||변형(Transform)||신경망 모델 구성하기||Autograd||최적화(Optimization)||모델 저장하고 불러오기신경망 모델 구성하기¶신경망은 데이터에 대한 연산을 수행하는 계층(layer)/모듈(module)로 구성되어 있습니다.torch.nn네임스페이스는 신경망을 구성하는데 필요한 모든 구성 요소를 제공합니다.
+PyTorch의 모든 모듈은nn.Module의 하위 클래스(subclass)
+입니다. 신경망은 다른 모듈(계층; layer)로 구성된 모듈입니다. 이러한 중첩된 구조는 복잡한 아키텍처를 쉽게 구축하고 관리할 수 있습니다.이어지는 장에서는 FashionMNIST 데이터셋의 이미지들을 분류하는 신경망을 구성해보겠습니다.importosimporttorchfromtorchimportnnfromtorch.utils.dataimportDataLoaderfromtorchvisionimportdatasets,transforms학습을 위한 장치 얻기¶가능한 경우 GPU 또는 MPS와 같은 하드웨어 가속기에서 모델을 학습하려고 합니다.torch.cuda또는torch.backends.mps가 사용 가능한지 확인해보고, 그렇지 않으면 CPU를 계속 사용합니다.device=("cuda"iftorch.cuda.is_available()else"mps"iftorch.backends.mps.is_available()else"cpu")print(f"Using{device}device")Using cuda device클래스 정의하기¶신경망 모델을nn.Module의 하위클래스로 정의하고,__init__에서 신경망 계층들을 초기화합니다.nn.Module을 상속받은 모든 클래스는forward메소드에 입력 데이터에 대한 연산들을 구현합니다.classNeuralNetwork(nn.Module):def__init__(self):super().__init__()self.flatten=nn.Flatten()self.linear_relu_stack=nn.Sequential(nn.Linear(28*28,512),nn.ReLU(),nn.Linear(512,512),nn.ReLU(),nn.Linear(512,10),)defforward(self,x):x=self.flatten(x)logits=self.linear_relu_stack(x)returnlogitsNeuralNetwork의 인스턴스(instance)를 생성하고 이를device로 이동한 뒤,
+구조(structure)를 출력합니다.model=NeuralNetwork().to(device)print(model)NeuralNetwork(
+  (flatten): Flatten(start_dim=1, end_dim=-1)
+  (linear_relu_stack): Sequential(
+    (0): Linear(in_features=784, out_features=512, bias=True)
+    (1): ReLU()
+    (2): Linear(in_features=512, out_features=512, bias=True)
+    (3): ReLU()
+    (4): Linear(in_features=512, out_features=10, bias=True)
+  )
+)모델을 사용하기 위해 입력 데이터를 전달합니다. 이는 일부백그라운드 연산들과 함께
+모델의forward를 실행합니다.model.forward()를 직접 호출하지 마세요!모델에 입력을 전달하여 호출하면 2차원 텐서를 반환합니다. 2차원 텐서의 dim=0은 각 분류(class)에 대한 원시(raw) 예측값 10개가,
+dim=1에는 각 출력의 개별 값들이 해당합니다.
+원시 예측값을nn.Softmax모듈의 인스턴스에 통과시켜 예측 확률을 얻습니다.X=torch.rand(1,28,28,device=device)logits=model(X)pred_probab=nn.Softmax(dim=1)(logits)y_pred=pred_probab.argmax(1)print(f"Predicted class:{y_pred}")Predicted class: tensor([7], device='cuda:0')모델 계층(Layer)¶FashionMNIST 모델의 계층들을 살펴보겠습니다. 이를 설명하기 위해, 28x28 크기의 이미지 3개로 구성된
+미니배치를 가져와, 신경망을 통과할 때 어떤 일이 발생하는지 알아보겠습니다.input_image=torch.rand(3,28,28)print(input_image.size())torch.Size([3, 28, 28])nn.Flatten¶nn.Flatten계층을 초기화하여
+각 28x28의 2D 이미지를 784 픽셀 값을 갖는 연속된 배열로 변환합니다. (dim=0의 미니배치 차원은 유지됩니다.)flatten=nn.Flatten()flat_image=flatten(input_image)print(flat_image.size())torch.Size([3, 784])nn.Linear¶선형 계층은 저장된 가중치(weight)와
+편향(bias)을 사용하여 입력에 선형 변환(linear transformation)을 적용하는 모듈입니다.layer1=nn.Linear(in_features=28*28,out_features=20)hidden1=layer1(flat_image)print(hidden1.size())torch.Size([3, 20])nn.ReLU¶비선형 활성화(activation)는 모델의 입력과 출력 사이에 복잡한 관계(mapping)를 만듭니다.
+비선형 활성화는 선형 변환 후에 적용되어비선형성(nonlinearity)을 도입하고, 신경망이 다양한 현상을 학습할 수 있도록 돕습니다.이 모델에서는nn.ReLU를 선형 계층들 사이에 사용하지만,
+모델을 만들 때는 비선형성을 가진 다른 활성화를 도입할 수도 있습니다.print(f"Before ReLU:{hidden1}\n\n")hidden1=nn.ReLU()(hidden1)print(f"After ReLU:{hidden1}")Before ReLU: tensor([[-0.0104,  0.0140, -0.1345, -0.2063, -0.0457,  0.1683,  0.8263, -0.0393,
+          0.1695, -0.1549, -0.2835,  0.5268,  0.1961, -0.1832,  0.1592,  0.1190,
+         -0.0760,  0.0419,  0.2624,  0.2088],
+        [-0.2475, -0.2524,  0.1190, -0.4282, -0.0164,  0.2265,  0.4653, -0.0714,
+          0.2430,  0.1137,  0.4633,  0.5006,  0.1300,  0.0761,  0.1044,  0.3631,
+         -0.3045, -0.2601,  0.6209, -0.1073],
+        [-0.2800, -0.4316,  0.0410,  0.1125, -0.0112,  0.2403,  0.3667,  0.1970,
+          0.2418, -0.2051, -0.0914,  0.5844,  0.1634,  0.0156, -0.2390,  0.3897,
+         -0.0655, -0.0901,  0.5191, -0.3114]], grad_fn=<AddmmBackward0>)
+
+
+After ReLU: tensor([[0.0000, 0.0140, 0.0000, 0.0000, 0.0000, 0.1683, 0.8263, 0.0000, 0.1695,
+         0.0000, 0.0000, 0.5268, 0.1961, 0.0000, 0.1592, 0.1190, 0.0000, 0.0419,
+         0.2624, 0.2088],
+        [0.0000, 0.0000, 0.1190, 0.0000, 0.0000, 0.2265, 0.4653, 0.0000, 0.2430,
+         0.1137, 0.4633, 0.5006, 0.1300, 0.0761, 0.1044, 0.3631, 0.0000, 0.0000,
+         0.6209, 0.0000],
+        [0.0000, 0.0000, 0.0410, 0.1125, 0.0000, 0.2403, 0.3667, 0.1970, 0.2418,
+         0.0000, 0.0000, 0.5844, 0.1634, 0.0156, 0.0000, 0.3897, 0.0000, 0.0000,
+         0.5191, 0.0000]], grad_fn=<ReluBackward0>)nn.Sequential¶nn.Sequential은 순서를 갖는
+모듈의 컨테이너입니다. 데이터는 정의된 것과 같은 순서로 모든 모듈들을 통해 전달됩니다. 순차 컨테이너(sequential container)를 사용하여
+아래의seq_modules와 같은 신경망을 빠르게 만들 수 있습니다.seq_modules=nn.Sequential(flatten,layer1,nn.ReLU(),nn.Linear(20,10))input_image=torch.rand(3,28,28)logits=seq_modules(input_image)nn.Softmax¶신경망의 마지막 선형 계층은nn.Softmax모듈에 전달될
+([-infty, infty] 범위의 원시 값(raw value)인)logits를 반환합니다. logits는 모델의 각 분류(class)에 대한 예측 확률을 나타내도록
+[0, 1] 범위로 비례하여 조정(scale)됩니다.dim매개변수는 값의 합이 1이 되는 차원을 나타냅니다.softmax=nn.Softmax(dim=1)pred_probab=softmax(logits)모델 매개변수¶신경망 내부의 많은 계층들은매개변수화(parameterize)됩니다. 즉, 학습 중에 최적화되는 가중치와 편향과 연관지어집니다.nn.Module을 상속하면 모델 객체 내부의 모든 필드들이 자동으로 추적(track)되며, 모델의parameters()및named_parameters()메소드로 모든 매개변수에 접근할 수 있게 됩니다.이 예제에서는 각 매개변수들을 순회하며(iterate), 매개변수의 크기와 값을 출력합니다.print(f"Model structure:{model}\n\n")forname,paraminmodel.named_parameters():print(f"Layer:{name}| Size:{param.size()}| Values :{param[:2]}\n")Model structure: NeuralNetwork(
+  (flatten): Flatten(start_dim=1, end_dim=-1)
+  (linear_relu_stack): Sequential(
+    (0): Linear(in_features=784, out_features=512, bias=True)
+    (1): ReLU()
+    (2): Linear(in_features=512, out_features=512, bias=True)
+    (3): ReLU()
+    (4): Linear(in_features=512, out_features=10, bias=True)
+  )
+)
+
+
+Layer: linear_relu_stack.0.weight | Size: torch.Size([512, 784]) | Values : tensor([[ 0.0262,  0.0165, -0.0289,  ..., -0.0029,  0.0231,  0.0286],
+        [-0.0257,  0.0352,  0.0302,  ...,  0.0138,  0.0338, -0.0297]],
+       device='cuda:0', grad_fn=<SliceBackward0>)
+
+Layer: linear_relu_stack.0.bias | Size: torch.Size([512]) | Values : tensor([0.0047, 0.0353], device='cuda:0', grad_fn=<SliceBackward0>)
+
+Layer: linear_relu_stack.2.weight | Size: torch.Size([512, 512]) | Values : tensor([[ 0.0260, -0.0004, -0.0258,  ...,  0.0322,  0.0419,  0.0138],
+        [ 0.0158,  0.0264, -0.0181,  ..., -0.0424,  0.0179, -0.0227]],
+       device='cuda:0', grad_fn=<SliceBackward0>)
+
+Layer: linear_relu_stack.2.bias | Size: torch.Size([512]) | Values : tensor([-0.0110,  0.0247], device='cuda:0', grad_fn=<SliceBackward0>)
+
+Layer: linear_relu_stack.4.weight | Size: torch.Size([10, 512]) | Values : tensor([[ 0.0139, -0.0397, -0.0069,  ..., -0.0164,  0.0176, -0.0072],
+        [ 0.0211,  0.0236,  0.0169,  ..., -0.0014,  0.0278,  0.0339]],
+       device='cuda:0', grad_fn=<SliceBackward0>)
+
+Layer: linear_relu_stack.4.bias | Size: torch.Size([10]) | Values : tensor([ 0.0136, -0.0358], device='cuda:0', grad_fn=<SliceBackward0>)더 읽어보기¶torch.nn APITotal running time of the script:( 0 minutes  0.076 seconds)DownloadPythonsourcecode:buildmodel_tutorial.pyDownloadJupyternotebook:buildmodel_tutorial.ipynbGallery generated by Sphinx-Gallery

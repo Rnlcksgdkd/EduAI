@@ -1,0 +1,92 @@
+
+
+{
+  "user_input" : {}
+  "rag_result" : {}
+  "generate_summary" : {}
+  "models_response" : {}
+}
+
+
+
+
+"user_input" :
+    {
+      
+    }
+
+
+'rag_result' :
+{
+  rag_option : 4
+  query : '......'
+  context : '........'
+} 
+
+
+
+"generate_summary" : 
+
+{ 
+  use_models : [ '4o-mini' , 'gpt-3.5-turbo' ]
+  use_cost : 0.34 $
+  total_response_time : 42 ms
+  finish_time : "2025-04-09T21:15:00Z"
+    }  
+
+
+
+'llm_models_response' :
+  {
+    '4o-mini' : { 'response_summary' : {  'model_name' : '4o-mini' , 
+                                          'input_token' : 152
+                                          'output_token' : 46
+                                          'cost' : 0.34 , 
+                                          'response_time' : 42  }
+
+                , 'problem_lst' : [ { 문제1 } , { 문제2 } , ..... , { 문제N } ] } , 
+    'gpt-3.5-turbo' : { 'generate_summary' : {} , 'problem_lst' : [ { 문제1 } , { 문제2 } , ..... , { 문제N } ] }
+  }
+
+
+
+
+
+{
+        "exam_name": "AI",
+        "topic": "빅데이터 분석 기획",
+        "num": 2,
+        "question": "DIKW 피라미드에서 '정보'는 어떤 단계에 해당하는가?",
+        "choice_1": "데이터 단계",
+        "choice_2": "정보 단계",
+        "choice_3": "지식 단계",
+        "choice_4": "지혜 단계",
+        "answer": 2,
+        "solution": "'정보'는 데이터를 처리 및 가공하여 의미를 도출한 단계로, DIKW 피라미드에서 두 번째 단계다.",
+        "difficulty": "하"
+    }
+
+
+
+{
+    
+    
+    
+  "query_text": "광합성의 과정은 어떻게 되나요?",
+  "query_time": "2025-04-09T21:15:00Z",
+  "user_id": "user_001",
+  "session_id": "sess_83f9a",
+  "retrieved_chunks": 3,
+  "retrieved_ids": ["doc1_chunk3", "doc1_chunk5", "doc2_chunk1"],
+  "document_id": ["doc1", "doc2"],
+  "source_type": ["pdf", "pptx"],
+  "topic": ["생물학"],
+  "response_text": "광합성은 식물이 빛 에너지를...",
+  "response_time": 2100,
+  "llm_model": "gpt-3.5-turbo",
+  "token_usage": {
+    "prompt": 350,
+    "completion": 185,
+    "total": 535
+  }
+}

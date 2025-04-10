@@ -1,0 +1,917 @@
+참고Clickhereto download the full example codeRay Tune을 사용한 하이퍼파라미터 튜닝¶번역:심형준하이퍼파라미터 튜닝은 보통의 모델과 매우 정확한 모델간의 차이를 만들어 낼 수 있습니다.
+종종 다른 학습률(Learnig rate)을 선택하거나 layer size를 변경하는 것과 같은 간단한 작업만으로도 모델 성능에 큰 영향을 미치기도 합니다.다행히, 최적의 매개변수 조합을 찾는데 도움이 되는 도구가 있습니다.Ray Tune은 분산 하이퍼파라미터 튜닝을 위한 업계 표준 도구입니다.
+Ray Tune은 최신 하이퍼파라미터 검색 알고리즘을 포함하고 TensorBoard 및 기타 분석 라이브러리와 통합되며 기본적으로Ray 의 분산 기계 학습 엔진을 통해 학습을 지원합니다.이 튜토리얼은 Ray Tune을 파이토치 학습 workflow에 통합하는 방법을 알려줍니다.
+CIFAR10 이미지 분류기를 훈련하기 위해파이토치 문서에서 이 튜토리얼을확장할 것입니다.아래와 같이 약간의 수정만 추가하면 됩니다.함수에서 데이터 로딩 및 학습 부분을 감싸두고,일부 네트워크 파라미터를 구성 가능하게 하고,체크포인트를 추가하고 (선택 사항),모델 튜닝을 위한 검색 공간을 정의합니다.이 튜토리얼을 실행하기 위해 아래의 패키지가 설치되어 있는지 확인하세요:ray[tune]: 배포된 하이퍼파라미터 튜닝 라이브러리torchvision: 데이터 변형을 위해 필요설정 / 불러오기¶필요한 라이브러리들을 불러오는 것(import)으로 시작해보겠습니다:fromfunctoolsimportpartialimportosimporttempfilefrompathlibimportPathimporttorchimporttorch.nnasnnimporttorch.nn.functionalasFimporttorch.optimasoptimfromtorch.utils.dataimportrandom_splitimporttorchvisionimporttorchvision.transformsastransformsfromrayimporttunefromrayimporttrainfromray.trainimportCheckpoint,get_checkpointfromray.tune.schedulersimportASHASchedulerimportray.cloudpickleaspickle대부분의 import들은 파이토치 모델을 빌드하는데 필요합니다.
+가장 마지막의 import만이 Ray Tune을 사용하기 위한 것입니다.Data loaders¶data loader를 자체 함수로 감싸두고 전역 데이터 디렉토리로 전달합니다.
+이런 식으로 서로 다른 실험들 간에 데이터 디렉토리를 공유할 수 있습니다.defload_data(data_dir="./data"):transform=transforms.Compose([transforms.ToTensor(),transforms.Normalize((0.5,0.5,0.5),(0.5,0.5,0.5))])trainset=torchvision.datasets.CIFAR10(root=data_dir,train=True,download=True,transform=transform)testset=torchvision.datasets.CIFAR10(root=data_dir,train=False,download=True,transform=transform)returntrainset,testset구성 가능한 신경망¶구성 가능한 파라미터만 튜닝이 가능합니다.
+이 예시를 통해 fully connected layer 크기를 지정할 수 있습니다:classNet(nn.Module):def__init__(self,l1=120,l2=84):super(Net,self).__init__()self.conv1=nn.Conv2d(3,6,5)self.pool=nn.MaxPool2d(2,2)self.conv2=nn.Conv2d(6,16,5)self.fc1=nn.Linear(16*5*5,l1)self.fc2=nn.Linear(l1,l2)self.fc3=nn.Linear(l2,10)defforward(self,x):x=self.pool(F.relu(self.conv1(x)))x=self.pool(F.relu(self.conv2(x)))x=torch.flatten(x,1)# 배치(batch) 차원을 제외한 모든 차원을 평탄화(flatten)x=F.relu(self.fc1(x))x=F.relu(self.fc2(x))x=self.fc3(x)returnx학습 함수¶흥미를 더해보고자파이토치 문서의 예제일부를 변경하여 소개합니다.학습 스크립트를train_cifar(config,data_dir=None)함수로 감싸둡니다.config매개변수는 학습할 하이퍼파라미터(hyperparameter)를 받습니다.data_dir은 여러 번의 실행(run) 시 동일한 데이터 소스를 공유할 수 있도록
+데이터를 읽고 저장하는 디렉토리를 지정합니다.
+또한, checkpoint가 지정되는 경우에는 실행 시작 시점의 모델과 옵티마이저 상태(optimizer state)를
+불러올 수 있습니다. 이 튜토리얼의 아래쪽에서 체크포인트(checkpoint)를 지정하는 방법과
+체크포인트의 용도에 대한 정보를 확인할 수 있습니다.net=Net(config["l1"],config["l2"])checkpoint=get_checkpoint()ifcheckpoint:withcheckpoint.as_directory()ascheckpoint_dir:data_path=Path(checkpoint_dir)/"data.pkl"withopen(data_path,"rb")asfp:checkpoint_state=pickle.load(fp)start_epoch=checkpoint_state["epoch"]net.load_state_dict(checkpoint_state["net_state_dict"])optimizer.load_state_dict(checkpoint_state["optimizer_state_dict"])else:start_epoch=0또한, 옵티마이저의 학습률(learning rate)을 구성할 수 있습니다.optimizer=optim.SGD(net.parameters(),lr=config["lr"],momentum=0.9)또한 학습 데이터를 학습 및 검증 세트로 나눕니다. 따라서 데이터의 80%는 모델 학습에 사용하고,
+나머지 20%에 대해 유효성 검사 및 손실을 계산합니다. 학습 및 테스트 세트를 반복하는 배치 크기도 구성할 수 있습니다.DataParallel을 이용한 GPU(다중)지원 추가¶이미지 분류는 GPU를 사용할 때 이점이 많습니다. 운좋게도 Ray Tune에서 파이토치의 추상화를 계속 사용할 수 있습니다.
+따라서 여러 GPU에서 데이터 병렬 훈련을 지원하기 위해 모델을nn.DataParallel으로 감쌀 수 있습니다.device="cpu"iftorch.cuda.is_available():device="cuda:0"iftorch.cuda.device_count()>1:net=nn.DataParallel(net)net.to(device)device변수를 사용하여 사용 가능한 GPU가 없을 때도 학습이 가능한지 확인합니다.
+파이토치는 다음과 같이 데이터를 GPU메모리에 명시적으로 보내도록 요구합니다.fori,datainenumerate(trainloader,0):inputs,labels=datainputs,labels=inputs.to(device),labels.to(device)이 코드는 이제 CPU들, 단일 GPU 및 다중 GPU에 대한 학습을 지원합니다.
+특히 Ray는fractional-GPU도 지원하므로
+모델이 GPU 메모리에 적합한 상황에서는 테스트 간에 GPU를 공유할 수 있습니다. 이는 나중에 다룰 것입니다.Ray Tune으로 통신하기¶가장 흥미로운 부분은 Ray Tune과의 통신입니다:checkpoint_data={"epoch":epoch,"net_state_dict":net.state_dict(),"optimizer_state_dict":optimizer.state_dict(),}withtempfile.TemporaryDirectory()ascheckpoint_dir:data_path=Path(checkpoint_dir)/"data.pkl"withopen(data_path,"wb")asfp:pickle.dump(checkpoint_data,fp)checkpoint=Checkpoint.from_directory(checkpoint_dir)train.report({"loss":val_loss/val_steps,"accuracy":correct/total},checkpoint=checkpoint,)여기서 먼저 체크포인트를 저장한 다음 일부 메트릭을 Ray Tune에 다시 보냅니다. 특히, validation loss와 accuracy를
+Ray Tune으로 다시 보냅니다. 그 후 Ray Tune은 이러한 메트릭을 사용하여 최상의 결과를 유도하는 하이퍼파라미터 구성을
+결정할 수 있습니다. 이러한 메트릭들은 또한 리소스 낭비를 방지하기 위해 성능이 좋지 않은 실험을 조기에 중지하는 데 사용할 수 있습니다.체크포인트 저장은 선택사항이지만,Population Based Training과 같은 고급 스케줄러를
+사용하기 위해서는 필요합니다.
+또한, 체크포인트를 저장해두면 나중에 학습된 모델을 로드하고 평가 세트(test set)에서 검증할 수 있습니다.전체 학습 함수¶전체 예제 코드는 다음과 같습니다.deftrain_cifar(config,data_dir=None):net=Net(config["l1"],config["l2"])device="cpu"iftorch.cuda.is_available():device="cuda:0"iftorch.cuda.device_count()>1:net=nn.DataParallel(net)net.to(device)criterion=nn.CrossEntropyLoss()optimizer=optim.SGD(net.parameters(),lr=config["lr"],momentum=0.9)checkpoint=get_checkpoint()ifcheckpoint:withcheckpoint.as_directory()ascheckpoint_dir:data_path=Path(checkpoint_dir)/"data.pkl"withopen(data_path,"rb")asfp:checkpoint_state=pickle.load(fp)start_epoch=checkpoint_state["epoch"]net.load_state_dict(checkpoint_state["net_state_dict"])optimizer.load_state_dict(checkpoint_state["optimizer_state_dict"])else:start_epoch=0trainset,testset=load_data(data_dir)test_abs=int(len(trainset)*0.8)train_subset,val_subset=random_split(trainset,[test_abs,len(trainset)-test_abs])trainloader=torch.utils.data.DataLoader(train_subset,batch_size=int(config["batch_size"]),shuffle=True,num_workers=8)valloader=torch.utils.data.DataLoader(val_subset,batch_size=int(config["batch_size"]),shuffle=True,num_workers=8)forepochinrange(start_epoch,10):# loop over the dataset multiple timesrunning_loss=0.0epoch_steps=0fori,datainenumerate(trainloader,0):# get the inputs; data is a list of [inputs, labels]inputs,labels=datainputs,labels=inputs.to(device),labels.to(device)# zero the parameter gradientsoptimizer.zero_grad()# forward + backward + optimizeoutputs=net(inputs)loss=criterion(outputs,labels)loss.backward()optimizer.step()# print statisticsrunning_loss+=loss.item()epoch_steps+=1ifi%2000==1999:# print every 2000 mini-batchesprint("[%d,%5d] loss:%.3f"%(epoch+1,i+1,running_loss/epoch_steps))running_loss=0.0# Validation lossval_loss=0.0val_steps=0total=0correct=0fori,datainenumerate(valloader,0):withtorch.no_grad():inputs,labels=datainputs,labels=inputs.to(device),labels.to(device)outputs=net(inputs)_,predicted=torch.max(outputs.data,1)total+=labels.size(0)correct+=(predicted==labels).sum().item()loss=criterion(outputs,labels)val_loss+=loss.cpu().numpy()val_steps+=1checkpoint_data={"epoch":epoch,"net_state_dict":net.state_dict(),"optimizer_state_dict":optimizer.state_dict(),}withtempfile.TemporaryDirectory()ascheckpoint_dir:data_path=Path(checkpoint_dir)/"data.pkl"withopen(data_path,"wb")asfp:pickle.dump(checkpoint_data,fp)checkpoint=Checkpoint.from_directory(checkpoint_dir)train.report({"loss":val_loss/val_steps,"accuracy":correct/total},checkpoint=checkpoint,)print("Finished Training")보다시피, 대부분의 코드는 원본 예제에서 직접 적용되었습니다.테스트셋 정확도(Test set accuracy)¶일반적으로 머신러닝 모델의 성능은 모델 학습 시 사용하지 않은 데이터를
+테스트셋으로 따로 떼어낸 뒤, 이를 사용하여 테스트합니다.
+이러한 테스트셋 또한 함수로 감싸둘 수 있습니다:deftest_accuracy(net,device="cpu"):trainset,testset=load_data()testloader=torch.utils.data.DataLoader(testset,batch_size=4,shuffle=False,num_workers=2)correct=0total=0withtorch.no_grad():fordataintestloader:images,labels=dataimages,labels=images.to(device),labels.to(device)outputs=net(images)_,predicted=torch.max(outputs.data,1)total+=labels.size(0)correct+=(predicted==labels).sum().item()returncorrect/total이 함수는 또한device파라미터를 요구하므로, test set 평가를 GPU에서 수행할 수 있습니다.검색 공간 구성¶마지막으로 Ray Tune의 검색 공간을 정의해야 합니다. 예시는 다음과 같습니다:config={"l1":tune.choice([2**iforiinrange(9)]),"l2":tune.choice([2**iforiinrange(9)]),"lr":tune.loguniform(1e-4,1e-1),"batch_size":tune.choice([2,4,8,16])}tune.choice()함수는 균일하게 샘플링된 값들의 목록을 입력으로 받습니다.
+위 예시에서l1및l2파라미터는 4와 256 사이의 2의 거듭제곱 값인 4, 8, 16, 32, 64, 128, 256 입니다.lr(학습률)은 0.0001과 0.1 사이에서 균일하게 샘플링 되어야 합니다. 마지막으로, 배치 크기는 2, 4, 8, 16중에서 선택할 수 있습니다.각 실험에서, Ray Tune은 이제 이러한 검색 공간에서 매개변수 조합을 무작위로 샘플링합니다.
+그런 다음 여러 모델을 병렬로 훈련하고 이 중에서 가장 성능이 좋은 모델을 찾습니다. 또한 성능이 좋지 않은 실험을 조기에 종료하는ASHAScheduler를 사용합니다.상수data_dir파라미터를 설정하기 위해functools.partial로train_cifar함수를 감싸둡니다. 또한 각 실험에 사용할 수 있는 자원들(resources)을 Ray Tune에 알릴 수 있습니다.gpus_per_trial=2# ...result=tune.run(partial(train_cifar,data_dir=data_dir),resources_per_trial={"cpu":8,"gpu":gpus_per_trial},config=config,num_samples=num_samples,scheduler=scheduler,checkpoint_at_end=True)파이토치DataLoader인스턴스의num_workers을 늘리기 위해 CPU 수를 지정하고 사용할 수 있습니다.
+각 실험에서 선택한 수의 GPU들은 파이토치에 표시됩니다. 실험들은 요청되지 않은 GPU에 액세스할 수 없으므로 같은 자원들을 사용하는 중복된 실험에 대해 신경쓰지 않아도 됩니다.부분 GPUs를 지정할 수도 있으므로,gpus_per_trial=0.5와 같은 것 또한 가능합니다. 이후 각 실험은 GPU를 공유합니다. 사용자는 모델이 여전히 GPU메모리에 적합한지만 확인하면 됩니다.모델을 훈련시킨 후, 가장 성능이 좋은 모델을 찾고 체크포인트 파일에서 학습된 모델을 로드합니다. 이후 test set 정확도(accuracy)를 얻고 모든 것들을 출력하여 확인할 수 있습니다.전체 주요 기능은 다음과 같습니다.defmain(num_samples=10,max_num_epochs=10,gpus_per_trial=2):data_dir=os.path.abspath("./data")load_data(data_dir)config={"l1":tune.choice([2**iforiinrange(9)]),"l2":tune.choice([2**iforiinrange(9)]),"lr":tune.loguniform(1e-4,1e-1),"batch_size":tune.choice([2,4,8,16]),}scheduler=ASHAScheduler(metric="loss",mode="min",max_t=max_num_epochs,grace_period=1,reduction_factor=2,)result=tune.run(partial(train_cifar,data_dir=data_dir),resources_per_trial={"cpu":2,"gpu":gpus_per_trial},config=config,num_samples=num_samples,scheduler=scheduler,)best_trial=result.get_best_trial("loss","min","last")print(f"Best trial config:{best_trial.config}")print(f"Best trial final validation loss:{best_trial.last_result['loss']}")print(f"Best trial final validation accuracy:{best_trial.last_result['accuracy']}")best_trained_model=Net(best_trial.config["l1"],best_trial.config["l2"])device="cpu"iftorch.cuda.is_available():device="cuda:0"ifgpus_per_trial>1:best_trained_model=nn.DataParallel(best_trained_model)best_trained_model.to(device)best_checkpoint=result.get_best_checkpoint(trial=best_trial,metric="accuracy",mode="max")withbest_checkpoint.as_directory()ascheckpoint_dir:data_path=Path(checkpoint_dir)/"data.pkl"withopen(data_path,"rb")asfp:best_checkpoint_data=pickle.load(fp)best_trained_model.load_state_dict(best_checkpoint_data["net_state_dict"])test_acc=test_accuracy(best_trained_model,device)print("Best trial test set accuracy:{}".format(test_acc))if__name__=="__main__":# 매 실험당 사용할 GPU 수를 여기에서 변경할 수 있습니다:main(num_samples=10,max_num_epochs=10,gpus_per_trial=0)Files already downloaded and verified
+Files already downloaded and verified
+2024-06-13 01:23:01,198 WARNING services.py:1889 -- WARNING: The object store is using /tmp instead of /dev/shm because /dev/shm has only 67104768 bytes available. This will harm performance! You may be able to free up space by deleting files in /dev/shm. If you are inside a Docker container, you can increase /dev/shm size by passing '--shm-size=10.24gb' to 'docker run' (or add it to the run_options list in a Ray cluster config). Make sure to set this to more than 30% of available RAM.
+2024-06-13 01:23:01,673 INFO worker.py:1642 -- Started a local Ray instance.
+2024-06-13 01:23:02,277 INFO tune.py:228 -- Initializing Ray automatically. For cluster usage or custom Ray initialization, call `ray.init(...)` before `tune.run(...)`.
+2024-06-13 01:23:02,278 INFO tune.py:654 -- [output] This will use the new output engine with verbosity 2. To disable the new output and use the legacy output engine, set the environment variable RAY_AIR_NEW_OUTPUT=0. For more information, please see https://github.com/ray-project/ray/issues/36949
++--------------------------------------------------------------------+
+| Configuration for experiment     train_cifar_2024-06-13_01-23-02   |
++--------------------------------------------------------------------+
+| Search algorithm                 BasicVariantGenerator             |
+| Scheduler                        AsyncHyperBandScheduler           |
+| Number of trials                 10                                |
++--------------------------------------------------------------------+
+
+View detailed results here: /root/ray_results/train_cifar_2024-06-13_01-23-02
+To visualize your results with TensorBoard, run: `tensorboard --logdir /root/ray_results/train_cifar_2024-06-13_01-23-02`
+
+Trial status: 10 PENDING
+Current time: 2024-06-13 01:23:02. Total running time: 0s
+Logical resource usage: 20.0/32 CPUs, 0/4 GPUs (0.0/1.0 accelerator_type:RTX)
++-------------------------------------------------------------------------------+
+| Trial name                status       l1     l2            lr     batch_size |
++-------------------------------------------------------------------------------+
+| train_cifar_7a38b_00000   PENDING      16      1   0.00213327               2 |
+| train_cifar_7a38b_00001   PENDING       1      2   0.013416                 4 |
+| train_cifar_7a38b_00002   PENDING     256     64   0.0113784                2 |
+| train_cifar_7a38b_00003   PENDING      64    256   0.0274071                8 |
+| train_cifar_7a38b_00004   PENDING      16      2   0.056666                 4 |
+| train_cifar_7a38b_00005   PENDING       8     64   0.000353097              4 |
+| train_cifar_7a38b_00006   PENDING      16      4   0.000147684              8 |
+| train_cifar_7a38b_00007   PENDING     256    256   0.00477469               8 |
+| train_cifar_7a38b_00008   PENDING     128    256   0.0306227                8 |
+| train_cifar_7a38b_00009   PENDING       2     16   0.0286986                2 |
++-------------------------------------------------------------------------------+
+
+Trial train_cifar_7a38b_00006 started with configuration:
++--------------------------------------------------+
+| Trial train_cifar_7a38b_00006 config             |
++--------------------------------------------------+
+| batch_size                                     8 |
+| l1                                            16 |
+| l2                                             4 |
+| lr                                       0.00015 |
++--------------------------------------------------+
+
+Trial train_cifar_7a38b_00004 started with configuration:
++--------------------------------------------------+
+| Trial train_cifar_7a38b_00004 config             |
++--------------------------------------------------+
+| batch_size                                     4 |
+| l1                                            16 |
+| l2                                             2 |
+| lr                                       0.05667 |
++--------------------------------------------------+
+
+Trial train_cifar_7a38b_00007 started with configuration:
++--------------------------------------------------+
+| Trial train_cifar_7a38b_00007 config             |
++--------------------------------------------------+
+| batch_size                                     8 |
+| l1                                           256 |
+| l2                                           256 |
+| lr                                       0.00477 |
++--------------------------------------------------+
+
+Trial train_cifar_7a38b_00001 started with configuration:
++--------------------------------------------------+
+| Trial train_cifar_7a38b_00001 config             |
++--------------------------------------------------+
+| batch_size                                     4 |
+| l1                                             1 |
+| l2                                             2 |
+| lr                                       0.01342 |
++--------------------------------------------------+
+
+Trial train_cifar_7a38b_00002 started with configuration:
++--------------------------------------------------+
+| Trial train_cifar_7a38b_00002 config             |
++--------------------------------------------------+
+| batch_size                                     2 |
+| l1                                           256 |
+| l2                                            64 |
+| lr                                       0.01138 |
++--------------------------------------------------+
+
+Trial train_cifar_7a38b_00005 started with configuration:
++--------------------------------------------------+
+| Trial train_cifar_7a38b_00005 config             |
++--------------------------------------------------+
+| batch_size                                     4 |
+| l1                                             8 |
+| l2                                            64 |
+| lr                                       0.00035 |
++--------------------------------------------------+
+
+Trial train_cifar_7a38b_00008 started with configuration:
++--------------------------------------------------+
+| Trial train_cifar_7a38b_00008 config             |
++--------------------------------------------------+
+| batch_size                                     8 |
+| l1                                           128 |
+| l2                                           256 |
+| lr                                       0.03062 |
++--------------------------------------------------+
+
+Trial train_cifar_7a38b_00009 started with configuration:
++-------------------------------------------------+
+| Trial train_cifar_7a38b_00009 config            |
++-------------------------------------------------+
+| batch_size                                    2 |
+| l1                                            2 |
+| l2                                           16 |
+| lr                                       0.0287 |
++-------------------------------------------------+
+
+Trial train_cifar_7a38b_00003 started with configuration:
++--------------------------------------------------+
+| Trial train_cifar_7a38b_00003 config             |
++--------------------------------------------------+
+| batch_size                                     8 |
+| l1                                            64 |
+| l2                                           256 |
+| lr                                       0.02741 |
++--------------------------------------------------+
+
+Trial train_cifar_7a38b_00000 started with configuration:
++--------------------------------------------------+
+| Trial train_cifar_7a38b_00000 config             |
++--------------------------------------------------+
+| batch_size                                     2 |
+| l1                                            16 |
+| l2                                             1 |
+| lr                                       0.00213 |
++--------------------------------------------------+
+(func pid=19541) Files already downloaded and verified
+(func pid=19544) [1,  2000] loss: 2.338
+(func pid=19544) Files already downloaded and verified [repeated 19x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/ray-logging.html#log-deduplication for more options.)
+(func pid=19536) [1,  4000] loss: 1.155 [repeated 12x across cluster]
+(func pid=19536) [1,  6000] loss: 0.770 [repeated 10x across cluster]
+
+Trial train_cifar_7a38b_00006 finished iteration 1 at 2024-06-13 01:23:24. Total running time: 21s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00006 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000000 |
+| time_this_iter_s                                  18.68609 |
+| time_total_s                                      18.68609 |
+| training_iteration                                       1 |
+| accuracy                                            0.1472 |
+| loss                                               2.26333 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00006 saved a checkpoint for iteration 1 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00006_6_batch_size=8,l1=16,l2=4,lr=0.0001_2024-06-13_01-23-02/checkpoint_000000
+(func pid=19541) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00006_6_batch_size=8,l1=16,l2=4,lr=0.0001_2024-06-13_01-23-02/checkpoint_000000)
+
+Trial train_cifar_7a38b_00003 finished iteration 1 at 2024-06-13 01:23:25. Total running time: 22s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00003 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000000 |
+| time_this_iter_s                                  19.42908 |
+| time_total_s                                      19.42908 |
+| training_iteration                                       1 |
+| accuracy                                            0.2085 |
+| loss                                               2.09395 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00003 saved a checkpoint for iteration 1 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00003_3_batch_size=8,l1=64,l2=256,lr=0.0274_2024-06-13_01-23-02/checkpoint_000000
+
+Trial train_cifar_7a38b_00008 finished iteration 1 at 2024-06-13 01:23:25. Total running time: 23s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00008 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000000 |
+| time_this_iter_s                                  20.08426 |
+| time_total_s                                      20.08426 |
+| training_iteration                                       1 |
+| accuracy                                            0.1937 |
+| loss                                               2.13803 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00008 saved a checkpoint for iteration 1 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00008_8_batch_size=8,l1=128,l2=256,lr=0.0306_2024-06-13_01-23-02/checkpoint_000000
+
+Trial train_cifar_7a38b_00007 finished iteration 1 at 2024-06-13 01:23:26. Total running time: 24s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00007 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000000 |
+| time_this_iter_s                                  21.27044 |
+| time_total_s                                      21.27044 |
+| training_iteration                                       1 |
+| accuracy                                             0.467 |
+| loss                                               1.46975 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00007 saved a checkpoint for iteration 1 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00007_7_batch_size=8,l1=256,l2=256,lr=0.0048_2024-06-13_01-23-02/checkpoint_000000
+(func pid=19536) [1,  8000] loss: 0.577 [repeated 6x across cluster]
+
+Trial status: 10 RUNNING
+Current time: 2024-06-13 01:23:32. Total running time: 30s
+Logical resource usage: 20.0/32 CPUs, 0/4 GPUs (0.0/1.0 accelerator_type:RTX)
++----------------------------------------------------------------------------------------------------------------------------------+
+| Trial name                status       l1     l2            lr     batch_size     iter     total time (s)      loss     accuracy |
++----------------------------------------------------------------------------------------------------------------------------------+
+| train_cifar_7a38b_00000   RUNNING      16      1   0.00213327               2                                                    |
+| train_cifar_7a38b_00001   RUNNING       1      2   0.013416                 4                                                    |
+| train_cifar_7a38b_00002   RUNNING     256     64   0.0113784                2                                                    |
+| train_cifar_7a38b_00003   RUNNING      64    256   0.0274071                8        1            19.4291   2.09395       0.2085 |
+| train_cifar_7a38b_00004   RUNNING      16      2   0.056666                 4                                                    |
+| train_cifar_7a38b_00005   RUNNING       8     64   0.000353097              4                                                    |
+| train_cifar_7a38b_00006   RUNNING      16      4   0.000147684              8        1            18.6861   2.26333       0.1472 |
+| train_cifar_7a38b_00007   RUNNING     256    256   0.00477469               8        1            21.2704   1.46975       0.467  |
+| train_cifar_7a38b_00008   RUNNING     128    256   0.0306227                8        1            20.0843   2.13803       0.1937 |
+| train_cifar_7a38b_00009   RUNNING       2     16   0.0286986                2                                                    |
++----------------------------------------------------------------------------------------------------------------------------------+
+(func pid=19536) [1, 10000] loss: 0.462 [repeated 9x across cluster]
+
+Trial train_cifar_7a38b_00001 finished iteration 1 at 2024-06-13 01:23:37. Total running time: 35s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00001 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000000 |
+| time_this_iter_s                                  31.89193 |
+| time_total_s                                      31.89193 |
+| training_iteration                                       1 |
+| accuracy                                            0.1027 |
+| loss                                               2.30876 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00001 saved a checkpoint for iteration 1 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00001_1_batch_size=4,l1=1,l2=2,lr=0.0134_2024-06-13_01-23-02/checkpoint_000000
+
+Trial train_cifar_7a38b_00001 completed after 1 iterations at 2024-06-13 01:23:37. Total running time: 35s
+(func pid=19536) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00001_1_batch_size=4,l1=1,l2=2,lr=0.0134_2024-06-13_01-23-02/checkpoint_000000) [repeated 4x across cluster]
+
+Trial train_cifar_7a38b_00004 finished iteration 1 at 2024-06-13 01:23:37. Total running time: 35s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00004 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000000 |
+| time_this_iter_s                                  32.12439 |
+| time_total_s                                      32.12439 |
+| training_iteration                                       1 |
+| accuracy                                            0.1012 |
+| loss                                               2.31333 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00004 saved a checkpoint for iteration 1 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00004_4_batch_size=4,l1=16,l2=2,lr=0.0567_2024-06-13_01-23-02/checkpoint_000000
+
+Trial train_cifar_7a38b_00004 completed after 1 iterations at 2024-06-13 01:23:37. Total running time: 35s
+
+Trial train_cifar_7a38b_00005 finished iteration 1 at 2024-06-13 01:23:37. Total running time: 35s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00005 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000000 |
+| time_this_iter_s                                  32.14858 |
+| time_total_s                                      32.14858 |
+| training_iteration                                       1 |
+| accuracy                                            0.3317 |
+| loss                                               1.73848 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00005 saved a checkpoint for iteration 1 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00005_5_batch_size=4,l1=8,l2=64,lr=0.0004_2024-06-13_01-23-02/checkpoint_000000
+(func pid=19543) [2,  4000] loss: 1.044 [repeated 9x across cluster]
+
+Trial train_cifar_7a38b_00006 finished iteration 2 at 2024-06-13 01:23:41. Total running time: 38s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00006 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000001 |
+| time_this_iter_s                                   16.7644 |
+| time_total_s                                      35.45049 |
+| training_iteration                                       2 |
+| accuracy                                            0.2179 |
+| loss                                               2.03356 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00006 saved a checkpoint for iteration 2 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00006_6_batch_size=8,l1=16,l2=4,lr=0.0001_2024-06-13_01-23-02/checkpoint_000001
+
+Trial train_cifar_7a38b_00003 finished iteration 2 at 2024-06-13 01:23:42. Total running time: 40s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00003 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000001 |
+| time_this_iter_s                                  17.46035 |
+| time_total_s                                      36.88943 |
+| training_iteration                                       2 |
+| accuracy                                            0.2099 |
+| loss                                               2.10333 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00003 saved a checkpoint for iteration 2 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00003_3_batch_size=8,l1=64,l2=256,lr=0.0274_2024-06-13_01-23-02/checkpoint_000001
+
+Trial train_cifar_7a38b_00003 completed after 2 iterations at 2024-06-13 01:23:42. Total running time: 40s
+(func pid=19538) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00003_3_batch_size=8,l1=64,l2=256,lr=0.0274_2024-06-13_01-23-02/checkpoint_000001) [repeated 4x across cluster]
+
+Trial train_cifar_7a38b_00008 finished iteration 2 at 2024-06-13 01:23:43. Total running time: 41s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00008 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000001 |
+| time_this_iter_s                                  17.90774 |
+| time_total_s                                      37.99199 |
+| training_iteration                                       2 |
+| accuracy                                            0.2142 |
+| loss                                                2.0999 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00008 saved a checkpoint for iteration 2 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00008_8_batch_size=8,l1=128,l2=256,lr=0.0306_2024-06-13_01-23-02/checkpoint_000001
+
+Trial train_cifar_7a38b_00008 completed after 2 iterations at 2024-06-13 01:23:43. Total running time: 41s
+(func pid=19537) [1, 14000] loss: 0.315 [repeated 6x across cluster]
+
+Trial train_cifar_7a38b_00007 finished iteration 2 at 2024-06-13 01:23:45. Total running time: 42s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00007 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000001 |
+| time_this_iter_s                                  18.33625 |
+| time_total_s                                      39.60669 |
+| training_iteration                                       2 |
+| accuracy                                             0.515 |
+| loss                                               1.34154 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00007 saved a checkpoint for iteration 2 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00007_7_batch_size=8,l1=256,l2=256,lr=0.0048_2024-06-13_01-23-02/checkpoint_000001
+(func pid=19542) [3,  2000] loss: 1.268 [repeated 8x across cluster]
+
+Trial train_cifar_7a38b_00006 finished iteration 3 at 2024-06-13 01:23:54. Total running time: 52s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00006 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000002 |
+| time_this_iter_s                                    13.384 |
+| time_total_s                                      48.83448 |
+| training_iteration                                       3 |
+| accuracy                                            0.2928 |
+| loss                                               1.86407 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00006 saved a checkpoint for iteration 3 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00006_6_batch_size=8,l1=16,l2=4,lr=0.0001_2024-06-13_01-23-02/checkpoint_000002
+(func pid=19541) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00006_6_batch_size=8,l1=16,l2=4,lr=0.0001_2024-06-13_01-23-02/checkpoint_000002) [repeated 3x across cluster]
+(func pid=19540) [2,  8000] loss: 0.391 [repeated 6x across cluster]
+
+Trial train_cifar_7a38b_00009 finished iteration 1 at 2024-06-13 01:23:57. Total running time: 55s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00009 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000000 |
+| time_this_iter_s                                  52.17583 |
+| time_total_s                                      52.17583 |
+| training_iteration                                       1 |
+| accuracy                                            0.0996 |
+| loss                                                2.3542 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00009 saved a checkpoint for iteration 1 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00009_9_batch_size=2,l1=2,l2=16,lr=0.0287_2024-06-13_01-23-02/checkpoint_000000
+
+Trial train_cifar_7a38b_00009 completed after 1 iterations at 2024-06-13 01:23:57. Total running time: 55s
+
+Trial train_cifar_7a38b_00000 finished iteration 1 at 2024-06-13 01:23:58. Total running time: 56s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00000 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000000 |
+| time_this_iter_s                                  52.59168 |
+| time_total_s                                      52.59168 |
+| training_iteration                                       1 |
+| accuracy                                            0.1026 |
+| loss                                               2.30493 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00000 saved a checkpoint for iteration 1 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00000_0_batch_size=2,l1=16,l2=1,lr=0.0021_2024-06-13_01-23-02/checkpoint_000000
+
+Trial train_cifar_7a38b_00000 completed after 1 iterations at 2024-06-13 01:23:58. Total running time: 56s
+
+Trial train_cifar_7a38b_00007 finished iteration 3 at 2024-06-13 01:24:00. Total running time: 57s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00007 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000002 |
+| time_this_iter_s                                  14.81741 |
+| time_total_s                                      54.42411 |
+| training_iteration                                       3 |
+| accuracy                                            0.5462 |
+| loss                                               1.28327 |
++------------------------------------------------------------+
+(func pid=19542) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00007_7_batch_size=8,l1=256,l2=256,lr=0.0048_2024-06-13_01-23-02/checkpoint_000002) [repeated 3x across cluster]
+Trial train_cifar_7a38b_00007 saved a checkpoint for iteration 3 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00007_7_batch_size=8,l1=256,l2=256,lr=0.0048_2024-06-13_01-23-02/checkpoint_000002
+
+Trial train_cifar_7a38b_00002 finished iteration 1 at 2024-06-13 01:24:01. Total running time: 59s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00002 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000000 |
+| time_this_iter_s                                  56.25512 |
+| time_total_s                                      56.25512 |
+| training_iteration                                       1 |
+| accuracy                                            0.1566 |
+| loss                                               2.21445 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00002 saved a checkpoint for iteration 1 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00002_2_batch_size=2,l1=256,l2=64,lr=0.0114_2024-06-13_01-23-02/checkpoint_000000
+
+Trial train_cifar_7a38b_00005 finished iteration 2 at 2024-06-13 01:24:01. Total running time: 59s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00005 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000001 |
+| time_this_iter_s                                  24.14589 |
+| time_total_s                                      56.29447 |
+| training_iteration                                       2 |
+| accuracy                                            0.4247 |
+| loss                                               1.55866 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00005 saved a checkpoint for iteration 2 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00005_5_batch_size=4,l1=8,l2=64,lr=0.0004_2024-06-13_01-23-02/checkpoint_000001
+
+Trial status: 6 TERMINATED | 4 RUNNING
+Current time: 2024-06-13 01:24:02. Total running time: 1min 0s
+Logical resource usage: 8.0/32 CPUs, 0/4 GPUs (0.0/1.0 accelerator_type:RTX)
++------------------------------------------------------------------------------------------------------------------------------------+
+| Trial name                status         l1     l2            lr     batch_size     iter     total time (s)      loss     accuracy |
++------------------------------------------------------------------------------------------------------------------------------------+
+| train_cifar_7a38b_00002   RUNNING       256     64   0.0113784                2        1            56.2551   2.21445       0.1566 |
+| train_cifar_7a38b_00005   RUNNING         8     64   0.000353097              4        2            56.2945   1.55866       0.4247 |
+| train_cifar_7a38b_00006   RUNNING        16      4   0.000147684              8        3            48.8345   1.86407       0.2928 |
+| train_cifar_7a38b_00007   RUNNING       256    256   0.00477469               8        3            54.4241   1.28327       0.5462 |
+| train_cifar_7a38b_00000   TERMINATED     16      1   0.00213327               2        1            52.5917   2.30493       0.1026 |
+| train_cifar_7a38b_00001   TERMINATED      1      2   0.013416                 4        1            31.8919   2.30876       0.1027 |
+| train_cifar_7a38b_00003   TERMINATED     64    256   0.0274071                8        2            36.8894   2.10333       0.2099 |
+| train_cifar_7a38b_00004   TERMINATED     16      2   0.056666                 4        1            32.1244   2.31333       0.1012 |
+| train_cifar_7a38b_00008   TERMINATED    128    256   0.0306227                8        2            37.992    2.0999        0.2142 |
+| train_cifar_7a38b_00009   TERMINATED      2     16   0.0286986                2        1            52.1758   2.3542        0.0996 |
++------------------------------------------------------------------------------------------------------------------------------------+
+(func pid=19541) [4,  4000] loss: 0.896 [repeated 5x across cluster]
+
+Trial train_cifar_7a38b_00006 finished iteration 4 at 2024-06-13 01:24:07. Total running time: 1min 5s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00006 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000003 |
+| time_this_iter_s                                  12.90658 |
+| time_total_s                                      61.74107 |
+| training_iteration                                       4 |
+| accuracy                                            0.3253 |
+| loss                                               1.75325 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00006 saved a checkpoint for iteration 4 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00006_6_batch_size=8,l1=16,l2=4,lr=0.0001_2024-06-13_01-23-02/checkpoint_000003
+(func pid=19541) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00006_6_batch_size=8,l1=16,l2=4,lr=0.0001_2024-06-13_01-23-02/checkpoint_000003) [repeated 3x across cluster]
+(func pid=19540) [3,  4000] loss: 0.744 [repeated 4x across cluster]
+
+Trial train_cifar_7a38b_00007 finished iteration 4 at 2024-06-13 01:24:13. Total running time: 1min 10s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00007 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000003 |
+| time_this_iter_s                                  13.06185 |
+| time_total_s                                      67.48595 |
+| training_iteration                                       4 |
+| accuracy                                            0.5599 |
+| loss                                               1.26385 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00007 saved a checkpoint for iteration 4 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00007_7_batch_size=8,l1=256,l2=256,lr=0.0048_2024-06-13_01-23-02/checkpoint_000003
+(func pid=19542) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00007_7_batch_size=8,l1=256,l2=256,lr=0.0048_2024-06-13_01-23-02/checkpoint_000003)
+(func pid=19540) [3,  8000] loss: 0.354 [repeated 6x across cluster]
+
+Trial train_cifar_7a38b_00006 finished iteration 5 at 2024-06-13 01:24:19. Total running time: 1min 17s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00006 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000004 |
+| time_this_iter_s                                  12.26632 |
+| time_total_s                                      74.00739 |
+| training_iteration                                       5 |
+| accuracy                                            0.3337 |
+| loss                                               1.71279 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00006 saved a checkpoint for iteration 5 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00006_6_batch_size=8,l1=16,l2=4,lr=0.0001_2024-06-13_01-23-02/checkpoint_000004
+(func pid=19541) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00006_6_batch_size=8,l1=16,l2=4,lr=0.0001_2024-06-13_01-23-02/checkpoint_000004)
+(func pid=19542) [5,  4000] loss: 0.562 [repeated 6x across cluster]
+
+Trial train_cifar_7a38b_00005 finished iteration 3 at 2024-06-13 01:24:22. Total running time: 1min 20s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00005 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000002 |
+| time_this_iter_s                                   20.4235 |
+| time_total_s                                      76.71797 |
+| training_iteration                                       3 |
+| accuracy                                            0.4892 |
+| loss                                               1.40937 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00005 saved a checkpoint for iteration 3 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00005_5_batch_size=4,l1=8,l2=64,lr=0.0004_2024-06-13_01-23-02/checkpoint_000002
+
+Trial train_cifar_7a38b_00007 finished iteration 5 at 2024-06-13 01:24:25. Total running time: 1min 23s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00007 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000004 |
+| time_this_iter_s                                  12.66731 |
+| time_total_s                                      80.15326 |
+| training_iteration                                       5 |
+| accuracy                                             0.573 |
+| loss                                               1.24556 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00007 saved a checkpoint for iteration 5 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00007_7_batch_size=8,l1=256,l2=256,lr=0.0048_2024-06-13_01-23-02/checkpoint_000004
+(func pid=19542) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00007_7_batch_size=8,l1=256,l2=256,lr=0.0048_2024-06-13_01-23-02/checkpoint_000004) [repeated 2x across cluster]
+(func pid=19537) [2, 14000] loss: 0.331 [repeated 4x across cluster]
+
+Trial train_cifar_7a38b_00006 finished iteration 6 at 2024-06-13 01:24:31. Total running time: 1min 29s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00006 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000005 |
+| time_this_iter_s                                    12.198 |
+| time_total_s                                      86.20539 |
+| training_iteration                                       6 |
+| accuracy                                            0.3618 |
+| loss                                               1.67671 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00006 saved a checkpoint for iteration 6 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00006_6_batch_size=8,l1=16,l2=4,lr=0.0001_2024-06-13_01-23-02/checkpoint_000005
+(func pid=19541) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00006_6_batch_size=8,l1=16,l2=4,lr=0.0001_2024-06-13_01-23-02/checkpoint_000005)
+
+Trial status: 6 TERMINATED | 4 RUNNING
+Current time: 2024-06-13 01:24:32. Total running time: 1min 30s
+Logical resource usage: 8.0/32 CPUs, 0/4 GPUs (0.0/1.0 accelerator_type:RTX)
++------------------------------------------------------------------------------------------------------------------------------------+
+| Trial name                status         l1     l2            lr     batch_size     iter     total time (s)      loss     accuracy |
++------------------------------------------------------------------------------------------------------------------------------------+
+| train_cifar_7a38b_00002   RUNNING       256     64   0.0113784                2        1            56.2551   2.21445       0.1566 |
+| train_cifar_7a38b_00005   RUNNING         8     64   0.000353097              4        3            76.718    1.40937       0.4892 |
+| train_cifar_7a38b_00006   RUNNING        16      4   0.000147684              8        6            86.2054   1.67671       0.3618 |
+| train_cifar_7a38b_00007   RUNNING       256    256   0.00477469               8        5            80.1533   1.24556       0.573  |
+| train_cifar_7a38b_00000   TERMINATED     16      1   0.00213327               2        1            52.5917   2.30493       0.1026 |
+| train_cifar_7a38b_00001   TERMINATED      1      2   0.013416                 4        1            31.8919   2.30876       0.1027 |
+| train_cifar_7a38b_00003   TERMINATED     64    256   0.0274071                8        2            36.8894   2.10333       0.2099 |
+| train_cifar_7a38b_00004   TERMINATED     16      2   0.056666                 4        1            32.1244   2.31333       0.1012 |
+| train_cifar_7a38b_00008   TERMINATED    128    256   0.0306227                8        2            37.992    2.0999        0.2142 |
+| train_cifar_7a38b_00009   TERMINATED      2     16   0.0286986                2        1            52.1758   2.3542        0.0996 |
++------------------------------------------------------------------------------------------------------------------------------------+
+(func pid=19540) [4,  6000] loss: 0.452 [repeated 5x across cluster]
+(func pid=19537) [2, 20000] loss: 0.231 [repeated 5x across cluster]
+
+Trial train_cifar_7a38b_00007 finished iteration 6 at 2024-06-13 01:24:39. Total running time: 1min 37s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00007 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000005 |
+| time_this_iter_s                                  13.74645 |
+| time_total_s                                      93.89971 |
+| training_iteration                                       6 |
+| accuracy                                            0.5617 |
+| loss                                               1.32171 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00007 saved a checkpoint for iteration 6 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00007_7_batch_size=8,l1=256,l2=256,lr=0.0048_2024-06-13_01-23-02/checkpoint_000005
+(func pid=19542) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00007_7_batch_size=8,l1=256,l2=256,lr=0.0048_2024-06-13_01-23-02/checkpoint_000005)
+
+Trial train_cifar_7a38b_00005 finished iteration 4 at 2024-06-13 01:24:43. Total running time: 1min 41s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00005 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000003 |
+| time_this_iter_s                                  21.32447 |
+| time_total_s                                      98.04244 |
+| training_iteration                                       4 |
+| accuracy                                            0.5205 |
+| loss                                               1.32226 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00005 saved a checkpoint for iteration 4 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00005_5_batch_size=4,l1=8,l2=64,lr=0.0004_2024-06-13_01-23-02/checkpoint_000003
+
+Trial train_cifar_7a38b_00006 finished iteration 7 at 2024-06-13 01:24:43. Total running time: 1min 41s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00006 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000006 |
+| time_this_iter_s                                  11.91382 |
+| time_total_s                                      98.11921 |
+| training_iteration                                       7 |
+| accuracy                                            0.3807 |
+| loss                                               1.62597 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00006 saved a checkpoint for iteration 7 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00006_6_batch_size=8,l1=16,l2=4,lr=0.0001_2024-06-13_01-23-02/checkpoint_000006
+
+Trial train_cifar_7a38b_00002 finished iteration 2 at 2024-06-13 01:24:44. Total running time: 1min 41s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00002 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000001 |
+| time_this_iter_s                                  42.38851 |
+| time_total_s                                      98.64363 |
+| training_iteration                                       2 |
+| accuracy                                            0.1013 |
+| loss                                               2.32246 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00002 saved a checkpoint for iteration 2 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00002_2_batch_size=2,l1=256,l2=64,lr=0.0114_2024-06-13_01-23-02/checkpoint_000001
+
+Trial train_cifar_7a38b_00002 completed after 2 iterations at 2024-06-13 01:24:44. Total running time: 1min 41s
+(func pid=19542) [7,  2000] loss: 0.980 [repeated 3x across cluster]
+(func pid=19540) [5,  4000] loss: 0.658 [repeated 4x across cluster]
+
+Trial train_cifar_7a38b_00007 finished iteration 7 at 2024-06-13 01:24:53. Total running time: 1min 51s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00007 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000006 |
+| time_this_iter_s                                  14.01664 |
+| time_total_s                                     107.91635 |
+| training_iteration                                       7 |
+| accuracy                                            0.5572 |
+| loss                                               1.30703 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00007 saved a checkpoint for iteration 7 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00007_7_batch_size=8,l1=256,l2=256,lr=0.0048_2024-06-13_01-23-02/checkpoint_000006
+(func pid=19542) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00007_7_batch_size=8,l1=256,l2=256,lr=0.0048_2024-06-13_01-23-02/checkpoint_000006) [repeated 4x across cluster]
+
+Trial train_cifar_7a38b_00006 finished iteration 8 at 2024-06-13 01:24:54. Total running time: 1min 52s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00006 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000007 |
+| time_this_iter_s                                  10.71017 |
+| time_total_s                                     108.82938 |
+| training_iteration                                       8 |
+| accuracy                                            0.3964 |
+| loss                                               1.58787 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00006 saved a checkpoint for iteration 8 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00006_6_batch_size=8,l1=16,l2=4,lr=0.0001_2024-06-13_01-23-02/checkpoint_000007
+(func pid=19540) [5,  8000] loss: 0.322 [repeated 3x across cluster]
+(func pid=19542) [8,  4000] loss: 0.508 [repeated 4x across cluster]
+
+Trial status: 7 TERMINATED | 3 RUNNING
+Current time: 2024-06-13 01:25:02. Total running time: 2min 0s
+Logical resource usage: 6.0/32 CPUs, 0/4 GPUs (0.0/1.0 accelerator_type:RTX)
++------------------------------------------------------------------------------------------------------------------------------------+
+| Trial name                status         l1     l2            lr     batch_size     iter     total time (s)      loss     accuracy |
++------------------------------------------------------------------------------------------------------------------------------------+
+| train_cifar_7a38b_00005   RUNNING         8     64   0.000353097              4        4            98.0424   1.32226       0.5205 |
+| train_cifar_7a38b_00006   RUNNING        16      4   0.000147684              8        8           108.829    1.58787       0.3964 |
+| train_cifar_7a38b_00007   RUNNING       256    256   0.00477469               8        7           107.916    1.30703       0.5572 |
+| train_cifar_7a38b_00000   TERMINATED     16      1   0.00213327               2        1            52.5917   2.30493       0.1026 |
+| train_cifar_7a38b_00001   TERMINATED      1      2   0.013416                 4        1            31.8919   2.30876       0.1027 |
+| train_cifar_7a38b_00002   TERMINATED    256     64   0.0113784                2        2            98.6436   2.32246       0.1013 |
+| train_cifar_7a38b_00003   TERMINATED     64    256   0.0274071                8        2            36.8894   2.10333       0.2099 |
+| train_cifar_7a38b_00004   TERMINATED     16      2   0.056666                 4        1            32.1244   2.31333       0.1012 |
+| train_cifar_7a38b_00008   TERMINATED    128    256   0.0306227                8        2            37.992    2.0999        0.2142 |
+| train_cifar_7a38b_00009   TERMINATED      2     16   0.0286986                2        1            52.1758   2.3542        0.0996 |
++------------------------------------------------------------------------------------------------------------------------------------+
+
+Trial train_cifar_7a38b_00005 finished iteration 5 at 2024-06-13 01:25:03. Total running time: 2min 0s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00005 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000004 |
+| time_this_iter_s                                  19.37044 |
+| time_total_s                                     117.41288 |
+| training_iteration                                       5 |
+| accuracy                                            0.5278 |
+| loss                                               1.28938 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00005 saved a checkpoint for iteration 5 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00005_5_batch_size=4,l1=8,l2=64,lr=0.0004_2024-06-13_01-23-02/checkpoint_000004
+(func pid=19540) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00005_5_batch_size=4,l1=8,l2=64,lr=0.0004_2024-06-13_01-23-02/checkpoint_000004) [repeated 2x across cluster]
+
+Trial train_cifar_7a38b_00006 finished iteration 9 at 2024-06-13 01:25:06. Total running time: 2min 3s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00006 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000008 |
+| time_this_iter_s                                  11.66423 |
+| time_total_s                                     120.49361 |
+| training_iteration                                       9 |
+| accuracy                                            0.4104 |
+| loss                                               1.56614 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00006 saved a checkpoint for iteration 9 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00006_6_batch_size=8,l1=16,l2=4,lr=0.0001_2024-06-13_01-23-02/checkpoint_000008
+
+Trial train_cifar_7a38b_00007 finished iteration 8 at 2024-06-13 01:25:06. Total running time: 2min 4s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00007 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000007 |
+| time_this_iter_s                                  13.01448 |
+| time_total_s                                     120.93083 |
+| training_iteration                                       8 |
+| accuracy                                            0.5742 |
+| loss                                                1.2795 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00007 saved a checkpoint for iteration 8 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00007_7_batch_size=8,l1=256,l2=256,lr=0.0048_2024-06-13_01-23-02/checkpoint_000007
+(func pid=19540) [6,  4000] loss: 0.640 [repeated 3x across cluster]
+(func pid=19542) [9,  4000] loss: 0.499 [repeated 5x across cluster]
+
+Trial train_cifar_7a38b_00006 finished iteration 10 at 2024-06-13 01:25:16. Total running time: 2min 14s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00006 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000009 |
+| time_this_iter_s                                  10.86062 |
+| time_total_s                                     131.35423 |
+| training_iteration                                      10 |
+| accuracy                                            0.4224 |
+| loss                                               1.53911 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00006 saved a checkpoint for iteration 10 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00006_6_batch_size=8,l1=16,l2=4,lr=0.0001_2024-06-13_01-23-02/checkpoint_000009
+
+Trial train_cifar_7a38b_00006 completed after 10 iterations at 2024-06-13 01:25:16. Total running time: 2min 14s
+(func pid=19541) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00006_6_batch_size=8,l1=16,l2=4,lr=0.0001_2024-06-13_01-23-02/checkpoint_000009) [repeated 3x across cluster]
+
+Trial train_cifar_7a38b_00007 finished iteration 9 at 2024-06-13 01:25:19. Total running time: 2min 16s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00007 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000008 |
+| time_this_iter_s                                  12.77853 |
+| time_total_s                                     133.70936 |
+| training_iteration                                       9 |
+| accuracy                                            0.5711 |
+| loss                                                1.3624 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00007 saved a checkpoint for iteration 9 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00007_7_batch_size=8,l1=256,l2=256,lr=0.0048_2024-06-13_01-23-02/checkpoint_000008
+
+Trial train_cifar_7a38b_00005 finished iteration 6 at 2024-06-13 01:25:22. Total running time: 2min 19s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00005 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000005 |
+| time_this_iter_s                                  19.25429 |
+| time_total_s                                     136.66717 |
+| training_iteration                                       6 |
+| accuracy                                             0.553 |
+| loss                                               1.25836 |
++------------------------------------------------------------+
+(func pid=19540) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00005_5_batch_size=4,l1=8,l2=64,lr=0.0004_2024-06-13_01-23-02/checkpoint_000005) [repeated 2x across cluster]
+Trial train_cifar_7a38b_00005 saved a checkpoint for iteration 6 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00005_5_batch_size=4,l1=8,l2=64,lr=0.0004_2024-06-13_01-23-02/checkpoint_000005
+(func pid=19542) [10,  2000] loss: 0.902 [repeated 3x across cluster]
+
+Trial train_cifar_7a38b_00007 finished iteration 10 at 2024-06-13 01:25:31. Total running time: 2min 29s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00007 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000009 |
+| time_this_iter_s                                  12.66014 |
+| time_total_s                                      146.3695 |
+| training_iteration                                      10 |
+| accuracy                                            0.5576 |
+| loss                                               1.46135 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00007 saved a checkpoint for iteration 10 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00007_7_batch_size=8,l1=256,l2=256,lr=0.0048_2024-06-13_01-23-02/checkpoint_000009
+
+Trial train_cifar_7a38b_00007 completed after 10 iterations at 2024-06-13 01:25:31. Total running time: 2min 29s
+(func pid=19542) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00007_7_batch_size=8,l1=256,l2=256,lr=0.0048_2024-06-13_01-23-02/checkpoint_000009)
+(func pid=19540) [7,  6000] loss: 0.404 [repeated 4x across cluster]
+
+Trial status: 9 TERMINATED | 1 RUNNING
+Current time: 2024-06-13 01:25:32. Total running time: 2min 30s
+Logical resource usage: 2.0/32 CPUs, 0/4 GPUs (0.0/1.0 accelerator_type:RTX)
++------------------------------------------------------------------------------------------------------------------------------------+
+| Trial name                status         l1     l2            lr     batch_size     iter     total time (s)      loss     accuracy |
++------------------------------------------------------------------------------------------------------------------------------------+
+| train_cifar_7a38b_00005   RUNNING         8     64   0.000353097              4        6           136.667    1.25836       0.553  |
+| train_cifar_7a38b_00000   TERMINATED     16      1   0.00213327               2        1            52.5917   2.30493       0.1026 |
+| train_cifar_7a38b_00001   TERMINATED      1      2   0.013416                 4        1            31.8919   2.30876       0.1027 |
+| train_cifar_7a38b_00002   TERMINATED    256     64   0.0113784                2        2            98.6436   2.32246       0.1013 |
+| train_cifar_7a38b_00003   TERMINATED     64    256   0.0274071                8        2            36.8894   2.10333       0.2099 |
+| train_cifar_7a38b_00004   TERMINATED     16      2   0.056666                 4        1            32.1244   2.31333       0.1012 |
+| train_cifar_7a38b_00006   TERMINATED     16      4   0.000147684              8       10           131.354    1.53911       0.4224 |
+| train_cifar_7a38b_00007   TERMINATED    256    256   0.00477469               8       10           146.37     1.46135       0.5576 |
+| train_cifar_7a38b_00008   TERMINATED    128    256   0.0306227                8        2            37.992    2.0999        0.2142 |
+| train_cifar_7a38b_00009   TERMINATED      2     16   0.0286986                2        1            52.1758   2.3542        0.0996 |
++------------------------------------------------------------------------------------------------------------------------------------+
+(func pid=19540) [7, 10000] loss: 0.236 [repeated 2x across cluster]
+
+Trial train_cifar_7a38b_00005 finished iteration 7 at 2024-06-13 01:25:41. Total running time: 2min 38s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00005 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000006 |
+| time_this_iter_s                                  18.85217 |
+| time_total_s                                     155.51934 |
+| training_iteration                                       7 |
+| accuracy                                            0.5797 |
+| loss                                               1.19435 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00005 saved a checkpoint for iteration 7 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00005_5_batch_size=4,l1=8,l2=64,lr=0.0004_2024-06-13_01-23-02/checkpoint_000006
+(func pid=19540) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00005_5_batch_size=4,l1=8,l2=64,lr=0.0004_2024-06-13_01-23-02/checkpoint_000006)
+(func pid=19540) [8,  2000] loss: 1.167
+(func pid=19540) [8,  4000] loss: 0.587
+(func pid=19540) [8,  6000] loss: 0.397
+(func pid=19540) [8,  8000] loss: 0.293
+(func pid=19540) [8, 10000] loss: 0.233
+
+Trial train_cifar_7a38b_00005 finished iteration 8 at 2024-06-13 01:25:59. Total running time: 2min 57s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00005 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000007 |
+| time_this_iter_s                                  18.80484 |
+| time_total_s                                     174.32419 |
+| training_iteration                                       8 |
+| accuracy                                            0.5733 |
+| loss                                               1.20184 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00005 saved a checkpoint for iteration 8 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00005_5_batch_size=4,l1=8,l2=64,lr=0.0004_2024-06-13_01-23-02/checkpoint_000007
+(func pid=19540) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00005_5_batch_size=4,l1=8,l2=64,lr=0.0004_2024-06-13_01-23-02/checkpoint_000007)
+
+Trial status: 9 TERMINATED | 1 RUNNING
+Current time: 2024-06-13 01:26:02. Total running time: 3min 0s
+Logical resource usage: 2.0/32 CPUs, 0/4 GPUs (0.0/1.0 accelerator_type:RTX)
++------------------------------------------------------------------------------------------------------------------------------------+
+| Trial name                status         l1     l2            lr     batch_size     iter     total time (s)      loss     accuracy |
++------------------------------------------------------------------------------------------------------------------------------------+
+| train_cifar_7a38b_00005   RUNNING         8     64   0.000353097              4        8           174.324    1.20184       0.5733 |
+| train_cifar_7a38b_00000   TERMINATED     16      1   0.00213327               2        1            52.5917   2.30493       0.1026 |
+| train_cifar_7a38b_00001   TERMINATED      1      2   0.013416                 4        1            31.8919   2.30876       0.1027 |
+| train_cifar_7a38b_00002   TERMINATED    256     64   0.0113784                2        2            98.6436   2.32246       0.1013 |
+| train_cifar_7a38b_00003   TERMINATED     64    256   0.0274071                8        2            36.8894   2.10333       0.2099 |
+| train_cifar_7a38b_00004   TERMINATED     16      2   0.056666                 4        1            32.1244   2.31333       0.1012 |
+| train_cifar_7a38b_00006   TERMINATED     16      4   0.000147684              8       10           131.354    1.53911       0.4224 |
+| train_cifar_7a38b_00007   TERMINATED    256    256   0.00477469               8       10           146.37     1.46135       0.5576 |
+| train_cifar_7a38b_00008   TERMINATED    128    256   0.0306227                8        2            37.992    2.0999        0.2142 |
+| train_cifar_7a38b_00009   TERMINATED      2     16   0.0286986                2        1            52.1758   2.3542        0.0996 |
++------------------------------------------------------------------------------------------------------------------------------------+
+(func pid=19540) [9,  2000] loss: 1.148
+(func pid=19540) [9,  4000] loss: 0.573
+(func pid=19540) [9,  6000] loss: 0.386
+(func pid=19540) [9,  8000] loss: 0.281
+(func pid=19540) [9, 10000] loss: 0.227
+
+Trial train_cifar_7a38b_00005 finished iteration 9 at 2024-06-13 01:26:18. Total running time: 3min 16s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00005 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000008 |
+| time_this_iter_s                                  18.85154 |
+| time_total_s                                     193.17573 |
+| training_iteration                                       9 |
+| accuracy                                            0.5802 |
+| loss                                               1.19521 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00005 saved a checkpoint for iteration 9 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00005_5_batch_size=4,l1=8,l2=64,lr=0.0004_2024-06-13_01-23-02/checkpoint_000008
+(func pid=19540) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00005_5_batch_size=4,l1=8,l2=64,lr=0.0004_2024-06-13_01-23-02/checkpoint_000008)
+(func pid=19540) [10,  2000] loss: 1.125
+(func pid=19540) [10,  4000] loss: 0.559
+(func pid=19540) [10,  6000] loss: 0.373
+(func pid=19540) [10,  8000] loss: 0.280
+
+Trial status: 9 TERMINATED | 1 RUNNING
+Current time: 2024-06-13 01:26:32. Total running time: 3min 30s
+Logical resource usage: 2.0/32 CPUs, 0/4 GPUs (0.0/1.0 accelerator_type:RTX)
++------------------------------------------------------------------------------------------------------------------------------------+
+| Trial name                status         l1     l2            lr     batch_size     iter     total time (s)      loss     accuracy |
++------------------------------------------------------------------------------------------------------------------------------------+
+| train_cifar_7a38b_00005   RUNNING         8     64   0.000353097              4        9           193.176    1.19521       0.5802 |
+| train_cifar_7a38b_00000   TERMINATED     16      1   0.00213327               2        1            52.5917   2.30493       0.1026 |
+| train_cifar_7a38b_00001   TERMINATED      1      2   0.013416                 4        1            31.8919   2.30876       0.1027 |
+| train_cifar_7a38b_00002   TERMINATED    256     64   0.0113784                2        2            98.6436   2.32246       0.1013 |
+| train_cifar_7a38b_00003   TERMINATED     64    256   0.0274071                8        2            36.8894   2.10333       0.2099 |
+| train_cifar_7a38b_00004   TERMINATED     16      2   0.056666                 4        1            32.1244   2.31333       0.1012 |
+| train_cifar_7a38b_00006   TERMINATED     16      4   0.000147684              8       10           131.354    1.53911       0.4224 |
+| train_cifar_7a38b_00007   TERMINATED    256    256   0.00477469               8       10           146.37     1.46135       0.5576 |
+| train_cifar_7a38b_00008   TERMINATED    128    256   0.0306227                8        2            37.992    2.0999        0.2142 |
+| train_cifar_7a38b_00009   TERMINATED      2     16   0.0286986                2        1            52.1758   2.3542        0.0996 |
++------------------------------------------------------------------------------------------------------------------------------------+
+(func pid=19540) [10, 10000] loss: 0.223
+
+Trial train_cifar_7a38b_00005 finished iteration 10 at 2024-06-13 01:26:37. Total running time: 3min 35s
++------------------------------------------------------------+
+| Trial train_cifar_7a38b_00005 result                       |
++------------------------------------------------------------+
+| checkpoint_dir_name                      checkpoint_000009 |
+| time_this_iter_s                                  18.68342 |
+| time_total_s                                     211.85915 |
+| training_iteration                                      10 |
+| accuracy                                            0.5915 |
+| loss                                               1.15473 |
++------------------------------------------------------------+
+Trial train_cifar_7a38b_00005 saved a checkpoint for iteration 10 at: (local)/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00005_5_batch_size=4,l1=8,l2=64,lr=0.0004_2024-06-13_01-23-02/checkpoint_000009
+
+Trial train_cifar_7a38b_00005 completed after 10 iterations at 2024-06-13 01:26:37. Total running time: 3min 35s
+
+Trial status: 10 TERMINATED
+Current time: 2024-06-13 01:26:37. Total running time: 3min 35s
+Logical resource usage: 2.0/32 CPUs, 0/4 GPUs (0.0/1.0 accelerator_type:RTX)
++------------------------------------------------------------------------------------------------------------------------------------+
+| Trial name                status         l1     l2            lr     batch_size     iter     total time (s)      loss     accuracy |
++------------------------------------------------------------------------------------------------------------------------------------+
+| train_cifar_7a38b_00000   TERMINATED     16      1   0.00213327               2        1            52.5917   2.30493       0.1026 |
+| train_cifar_7a38b_00001   TERMINATED      1      2   0.013416                 4        1            31.8919   2.30876       0.1027 |
+| train_cifar_7a38b_00002   TERMINATED    256     64   0.0113784                2        2            98.6436   2.32246       0.1013 |
+| train_cifar_7a38b_00003   TERMINATED     64    256   0.0274071                8        2            36.8894   2.10333       0.2099 |
+| train_cifar_7a38b_00004   TERMINATED     16      2   0.056666                 4        1            32.1244   2.31333       0.1012 |
+| train_cifar_7a38b_00005   TERMINATED      8     64   0.000353097              4       10           211.859    1.15473       0.5915 |
+| train_cifar_7a38b_00006   TERMINATED     16      4   0.000147684              8       10           131.354    1.53911       0.4224 |
+| train_cifar_7a38b_00007   TERMINATED    256    256   0.00477469               8       10           146.37     1.46135       0.5576 |
+| train_cifar_7a38b_00008   TERMINATED    128    256   0.0306227                8        2            37.992    2.0999        0.2142 |
+| train_cifar_7a38b_00009   TERMINATED      2     16   0.0286986                2        1            52.1758   2.3542        0.0996 |
++------------------------------------------------------------------------------------------------------------------------------------+
+
+Best trial config: {'l1': 8, 'l2': 64, 'lr': 0.0003530972286268149, 'batch_size': 4}
+Best trial final validation loss: 1.1547251387566329
+Best trial final validation accuracy: 0.5915
+(func pid=19540) Checkpoint successfully created at: Checkpoint(filesystem=local, path=/root/ray_results/train_cifar_2024-06-13_01-23-02/train_cifar_7a38b_00005_5_batch_size=4,l1=8,l2=64,lr=0.0004_2024-06-13_01-23-02/checkpoint_000009)
+Files already downloaded and verified
+Files already downloaded and verified
+Best trial test set accuracy: 0.5948코드를 실행하면 결과는 다음과 같이 나올 것입니다:Numberoftrials:10/10(10TERMINATED)+-----+--------------+------+------+-------------+--------+---------+------------+|...|batch_size|l1|l2|lr|iter|loss|accuracy||-----+--------------+------+------+-------------+--------+---------+------------||...|2|1|256|0.000668163|1|2.31479|0.0977||...|4|64|8|0.0331514|1|2.31605|0.0983||...|4|2|1|0.000150295|1|2.30755|0.1023||...|16|32|32|0.0128248|10|1.66912|0.4391||...|4|8|128|0.00464561|2|1.7316|0.3463||...|8|256|8|0.00031556|1|2.19409|0.1736||...|4|16|256|0.00574329|2|1.85679|0.3368||...|8|2|2|0.00325652|1|2.30272|0.0984||...|2|2|2|0.000342987|2|1.76044|0.292||...|4|64|32|0.003734|8|1.53101|0.4761|+-----+--------------+------+------+-------------+--------+---------+------------+
+
+Besttrialconfig:{'l1':64,'l2':32,'lr':0.0037339984519545164,'batch_size':4}Besttrialfinalvalidationloss:1.5310075663924216
+Besttrialfinalvalidationaccuracy:0.4761
+Besttrialtestsetaccuracy:0.4737대부분의 실험은 자원 낭비를 막기 위해 일찍 중단되었습니다.
+가장 좋은 결과를 얻은 실험은 47%의 정확도를 달성했으며,
+이는 테스트셋에서 확인할 수 있습니다.이것이 전부입니다! 이제 파이토치 모델의 매개변수를 조정할 수 있습니다.Total running time of the script:( 3 minutes  44.272 seconds)DownloadPythonsourcecode:hyperparameter_tuning_tutorial.pyDownloadJupyternotebook:hyperparameter_tuning_tutorial.ipynbGallery generated by Sphinx-Gallery

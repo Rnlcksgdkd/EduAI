@@ -1,0 +1,12 @@
+Introduction||What is DDP||Single-Node Multi-GPU Training||Fault Tolerance||Multi-Node training||minGPT TrainingDistributed Data Parallel in PyTorch - Video Tutorials¶Authors:Suraj SubramanianFollow along with the video below or onyoutube.This series of video tutorials walks you through distributed training in
+PyTorch via DDP.The series starts with a simple non-distributed training job, and ends
+with deploying a training job across several machines in a cluster.
+Along the way, you will also learn abouttorchrunfor
+fault-tolerant distributed training.The tutorial assumes a basic familiarity with model training in PyTorch.Running the code¶You will need multiple CUDA GPUs to run the tutorial code. Typically,
+this can be done on a cloud instance with multiple GPUs (the tutorials
+use an Amazon EC2 P3 instance with 4 GPUs).The tutorial code is hosted in thisgithub repo.
+Clone the repository and follow along!Tutorial sections¶Introduction (this page)What is DDP?Gently introduces what DDP is doing
+under the hoodSingle-Node Multi-GPU TrainingTraining models
+using multiple GPUs on a single machineFault-tolerant distributed trainingMaking your distributed training job robust with torchrunMulti-Node trainingTraining models using
+multiple GPUs on multiple machinesTraining a GPT model with DDP“Real-world”
+example of training aminGPTmodel with DDP

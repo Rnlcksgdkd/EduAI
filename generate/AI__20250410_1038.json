@@ -1,0 +1,67 @@
+[
+    {
+        "exam_name": "AI",
+        "topic": "빅데이터의 개념",
+        "num": 1,
+        "question": "빅데이터의 대표적인 특성으로 3V에 포함되지 않는 것은 무엇인가?",
+        "choice_1": "정확성(Veracity)",
+        "choice_2": "속도(Velocity)",
+        "choice_3": "규모(Volume)",
+        "choice_4": "신뢰성(Reliability)",
+        "answer": 4,
+        "solution": "3V는 규모(Volume), 다양성(Variety), 속도(Velocity)로 구성되며, 신뢰성(Reliability)은 포함되지 않습니다.",
+        "difficulty": "하"
+    },
+    {
+        "exam_name": "AI",
+        "topic": "데이터 분석 기획",
+        "num": 2,
+        "question": "빅데이터 분석 기획에서 가장 먼저 해야 할 작업은 무엇인가?",
+        "choice_1": "분석 방안 수립",
+        "choice_2": "해결하려는 문제 정의",
+        "choice_3": "모델링 개념 정리",
+        "choice_4": "데이터 수집 계획",
+        "answer": 2,
+        "solution": "분석 기획 단계에서는 해결하려는 문제를 명확히 정의하는 것이 가장 중요합니다.",
+        "difficulty": "중"
+    },
+    {
+        "exam_name": "AI",
+        "topic": "데이터 수집 방법",
+        "num": 3,
+        "question": "정형 데이터 수집에 가장 적합한 방법은 무엇인가?",
+        "choice_1": "웹 크롤링",
+        "choice_2": "ETL",
+        "choice_3": "API 호출",
+        "choice_4": "소셜 미디어 분석",
+        "answer": 2,
+        "solution": "정형 데이터는 주로 ETL 방식으로 기존 데이터베이스나 시스템에서 추출하여 수집합니다.",
+        "difficulty": "하"
+    },
+    {
+        "exam_name": "AI",
+        "topic": "데이터 전처리",
+        "num": 4,
+        "question": "결측값(missing value) 처리를 할 때 사용할 수 있는 방법이 아닌 것은?",
+        "choice_1": "삭제",
+        "choice_2": "대체(imputation)",
+        "choice_3": "무시",
+        "choice_4": "보간",
+        "answer": 3,
+        "solution": "결측값을 처리할 때는 삭제, 대체, 보간 방법을 사용하지만, 무시하는 것은 적절한 방법이 아닙니다.",
+        "difficulty": "중"
+    },
+    {
+        "exam_name": "AI",
+        "topic": "모델 평가",
+        "num": 5,
+        "question": "분류 모델의 평가 지표로 적절하지 않은 것은 무엇인가?",
+        "choice_1": "정확도(Accuracy)",
+        "choice_2": "평균 제곱 오차(MSE)",
+        "choice_3": "정밀도(Precision)",
+        "choice_4": "재현율(Recall)",
+        "answer": 2,
+        "solution": "MSE는 회귀 문제에서 사용하는 지표이며, 분류 모델 평가에서는 정확도, 정밀도, 재현율 등이 사용됩니다.",
+        "difficulty": "하"
+    }
+]

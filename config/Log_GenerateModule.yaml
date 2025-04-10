@@ -1,0 +1,20 @@
+
+user_input:
+  input_file_path: 
+  title :
+  topic :
+  num_question :
+  rag_option = :
+
+rag_result:
+  context:
+
+generate_summary:  
+  use_models :
+  use_cost : 
+  total_response_time :
+  finish_time : 
+
+models_response:
+
+
