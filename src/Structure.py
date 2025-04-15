@@ -26,8 +26,8 @@ class MultiChoiceQuestion(BaseModel):
     
     difficulty : Literal['하', '중', '상']  = Field(description=
                              """
-                            "문제 난이도\n"
-                            "- 하: 기본적인 개념 이해\n"
+                            "문제 난이도"
+                            "- 하: 기본적인 개념 이해"
                             "- 중: 기본 개념을 이해하고 상황에 맞게 적용 가능"
                             "- 상: 복합적인 사고/추론/적용 필요""")
                     
@@ -78,7 +78,7 @@ class State(TypedDict):
     models_info : dict
     
     ## 문제 생성에 필요한 정보들 ##
-    exam_name : str
+    title : str
     topic : str
     difficulty: str
     num_question: int

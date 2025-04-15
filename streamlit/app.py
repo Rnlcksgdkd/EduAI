@@ -2,7 +2,7 @@ import streamlit as st
 import json
 
 # JSON 파일 경로 또는 dict 직접 사용
-with open("../feedback/AI__20250410_0956.json", "r", encoding="utf-8") as f:
+with open("../feedback/AI__20250415_1740.json", "r", encoding="utf-8") as f:
     data = json.load(f)
 
 questions = data["Question"]

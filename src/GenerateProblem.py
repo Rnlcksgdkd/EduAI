@@ -74,8 +74,6 @@ def retrieve_rag(state , rag_module):
     response = rag_module.invoke({  'file_path' : input_file_path  , 'rag_option' : rag_option , 'query' : topic })
     
     
-    print(state['log_messages'])
-    
     # RAG 서브그래프 응답 반환
     return {"context": response["context"]}
 
@@ -106,9 +104,13 @@ def problem_generate_prompt(state):
         num_question=num_question,
         format=parser.get_format_instructions()
     )
+    
+    print("####")
+    print(title)
         
     # State에 prompt_message 추가
-    return {"messages" : prompt_messages , "prompt_message": prompt_messages , 'graph_flow' : (state.get('graph_flow', []) + [NODE_PROMPT]) , 'node_name' : NODE_PROMPT }
+    return {"messages" : prompt_messages , 
+            'title' : title , "prompt_message": prompt_messages , 'graph_flow' : (state.get('graph_flow', []) + [NODE_PROMPT]) , 'node_name' : NODE_PROMPT }
 
 ## ✅ 3. LLM 모델 응답 생성 노드 (병렬 처리) ##
 generate_problem = RunnableLambda(lambda state : build_parallel_model_map(state.get('models').keys()))

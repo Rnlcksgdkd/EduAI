@@ -1,0 +1,168 @@
+{
+    "Question": [
+        {
+            "title": "AI",
+            "topic": "빅데이터 분석",
+            "num": 1,
+            "question": "빅데이터의 3V 중 속도(Velocity)가 의미하는 것은 무엇인가?",
+            "choice_1": "데이터의 양이 방대함",
+            "choice_2": "데이터 종류의 다양함",
+            "choice_3": "데이터 생성 및 처리 속도가 빠름",
+            "choice_4": "데이터의 신뢰성과 타당성",
+            "answer": 3,
+            "solution": "속도(Velocity)는 데이터가 생성되고 처리되는 속도가 빠르다는 것을 의미합니다. 빠른 데이터 생성과 처리가 빅데이터의 주요 특성 중 하나입니다.",
+            "difficulty": "하"
+        },
+        {
+            "title": "AI",
+            "topic": "빅데이터 분석",
+            "num": 2,
+            "question": "5V의 추가 요소 중 '정확성(Veracity)'의 의미는 무엇인가?",
+            "choice_1": "데이터의 신뢰성과 타당성 확보",
+            "choice_2": "데이터의 고유한 가치 창출",
+            "choice_3": "데이터의 규모와 다양성",
+            "choice_4": "데이터의 신속한 처리 속도",
+            "answer": 1,
+            "solution": "정확성(Veracity)은 데이터의 신뢰성과 타당성을 확보하는 것을 의미하며, 노이즈나 오류를 걸러내어 품질 높은 데이터만을 분석에 사용함을 뜻합니다.",
+            "difficulty": "중"
+        },
+        {
+            "title": "AI",
+            "topic": "빅데이터 분석",
+            "num": 3,
+            "question": "다음 중 '하둡(Hadoop)'의 주요 기능은 무엇인가?",
+            "choice_1": "실시간 데이터 처리를 위한 플랫폼",
+            "choice_2": "대규모 데이터를 분산 저장하고 병렬 처리하는 프레임워크",
+            "choice_3": "정형 데이터만 처리할 수 있는 시스템",
+            "choice_4": "머신러닝 알고리즘을 지원하는 도구",
+            "answer": 2,
+            "solution": "하둡(Hadoop)은 대용량 데이터를 여러 대의 서버에 분산 저장하고 병렬 처리하는 자바 기반의 오픈소스 프레임워크로, 주로 비정형 데이터를 다루는 데 효과적입니다.",
+            "difficulty": "중"
+        },
+        {
+            "title": "AI",
+            "topic": "빅데이터 분석",
+            "num": 4,
+            "question": "다음 중 데이터 엔지니어의 주요 역할이 아닌 것은 무엇인가?",
+            "choice_1": "데이터 수집, 저장, 유지·보수",
+            "choice_2": "데이터의 패턴 분석 및 인사이트 도출",
+            "choice_3": "정제되고 완전한 형태로 데이터 제공",
+            "choice_4": "데이터 인프라에 대한 전문 지식 활용",
+            "answer": 2,
+            "solution": "데이터 엔지니어의 주요 역할은 데이터의 수집, 저장, 유지·보수를 하는 것으로, 데이터의 패턴 분석 및 인사이트 도출은 데이터 분석가의 역할입니다.",
+            "difficulty": "상"
+        },
+        {
+            "title": "AI",
+            "topic": "빅데이터 분석",
+            "num": 5,
+            "question": "개인정보 보호 법·제도에 따라 비식별화된 가명정보는 어떤 용도로 활용할 수 있는가?",
+            "choice_1": "모든 목적의 활용이 가능하다",
+            "choice_2": "동의 없이 통계·연구 등의 목적으로 활용 가능하다",
+            "choice_3": "상업적 목적으로만 활용 가능하다",
+            "choice_4": "데이터 비식별화 없이 활용이 불가능하다",
+            "answer": 2,
+            "solution": "개인정보 보호 법·제도에 따르면 비식별화된 가명정보는 신용정보 분야나 통계·연구 등의 목적으로 동의 없이 활용 가능하다는 규정이 있습니다.",
+            "difficulty": "중"
+        }
+    ],
+    "Solver": [
+        {
+            "choice_1_conf": "0",
+            "choice_2_conf": "0",
+            "choice_3_conf": "1",
+            "choice_4_conf": "0",
+            "solver_answer": 3,
+            "solver_solution": "빅데이터의 3V 중 속도(Velocity)는 데이터가 생성되고 처리되는 속도를 의미합니다. 즉, 데이터가 얼마나 빠르게 생성되고 분석되어야 하는지를 나타내는 것입니다. 다른 선택지들은 크기(Volume), 다양성(Variety), 정확성(Veracity)과 관련된 개념입니다."
+        },
+        {
+            "choice_1_conf": "1",
+            "choice_2_conf": "0",
+            "choice_3_conf": "0",
+            "choice_4_conf": "0",
+            "solver_answer": 1,
+            "solver_solution": "5V에서 '정확성(Veracity)'은 데이터의 신뢰성과 타당성을 확보하는 것을 의미합니다. 이는 데이터의 품질과 관련된 개념으로, 데이터가 얼마나 정확하고 신뢰할 수 있는지를 나타냅니다."
+        },
+        {
+            "choice_1_conf": "0",
+            "choice_2_conf": "1",
+            "choice_3_conf": "0",
+            "choice_4_conf": "0.5",
+            "solver_answer": 2,
+            "solver_solution": "하둡(Hadoop)은 대규모 데이터를 분산 저장하고 병렬 처리하는 프레임워크로, 대량의 데이터를 효율적으로 처리하기 위해 설계되었습니다. 이는 하둡의 핵심 기능입니다. 실시간 데이터 처리보다는 배치 처리(batch processing)에 적합하며, 정형 데이터뿐만 아니라 비정형 데이터도 처리할 수 있습니다. 머신러닝 알고리즘을 직접 지원하지는 않지만, 하둡 위에서 동작하는 여러 도구들이 이를 지원할 수 있습니다."
+        },
+        {
+            "choice_1_conf": "0",
+            "choice_2_conf": "1",
+            "choice_3_conf": "0",
+            "choice_4_conf": "0",
+            "solver_answer": 2,
+            "solver_solution": "데이터 엔지니어의 주요 역할은 데이터의 수집, 저장, 유지·보수와 데이터 인프라에 대한 전문 지식 활용, 정제되고 완전한 형태로 데이터 제공 등이 포함됩니다. 그러나 데이터의 패턴 분석 및 인사이트 도출은 주로 데이터 사이언티스트의 역할에 해당합니다."
+        },
+        {
+            "choice_1_conf": "0",
+            "choice_2_conf": "1",
+            "choice_3_conf": "0",
+            "choice_4_conf": "0",
+            "solver_answer": 2,
+            "solver_solution": "개인정보 보호법에 따라 비식별화된 가명정보는 통계, 연구 등의 목적으로 개인의 동의 없이 사용할 수 있습니다. 이는 데이터 활용을 촉진하면서도 개인정보 보호를 위한 장치입니다."
+        }
+    ],
+    "Critic": [
+        {
+            "question_concept": "빅데이터의 3V 중 속도(Velocity)",
+            "question_level": "하",
+            "wrong_answer": false,
+            "multiple_plausible": false,
+            "no_clear_answer": false,
+            "question_clear": "문제와 선택지는 명확하고 간결하게 작성되어 있습니다.",
+            "question_unnecessary": "불필요한 정보나 혼란을 주는 표현은 없습니다.",
+            "question_grammar": "문법적 오류와 맞춤법 실수는 없습니다.",
+            "question_structure": "모든 선택지는 문법적 구조와 형식이 유사합니다."
+        },
+        {
+            "question_concept": "5V의 정확성(Veracity) 의미",
+            "question_level": "중",
+            "wrong_answer": false,
+            "multiple_plausible": false,
+            "no_clear_answer": true,
+            "question_clear": "문제와 선택지가 명확하게 작성되어 있습니다.",
+            "question_unnecessary": "불필요한 정보나 혼란을 주는 표현은 없습니다.",
+            "question_grammar": "문법적 오류와 맞춤법 실수는 없습니다.",
+            "question_structure": "모든 선택지는 유사한 문법적 구조와 형식을 따르고 있습니다."
+        },
+        {
+            "question_concept": "Hadoop의 주요 기능",
+            "question_level": "중",
+            "wrong_answer": false,
+            "multiple_plausible": false,
+            "no_clear_answer": true,
+            "question_clear": "문제와 선택지는 대체로 명확하게 작성되어 있습니다. 그러나 선택지 4번의 '머신러닝 알고리즘을 지원하는 도구'는 '지원'이라는 단어가 모호하게 들릴 수 있습니다.",
+            "question_unnecessary": "불필요한 정보는 없습니다.",
+            "question_grammar": "문법적 오류나 맞춤법 실수는 없습니다.",
+            "question_structure": "모든 선택지는 문법적 구조와 형식이 유사합니다."
+        },
+        {
+            "question_concept": "데이터 엔지니어의 역할",
+            "question_level": "중",
+            "wrong_answer": false,
+            "multiple_plausible": false,
+            "no_clear_answer": true,
+            "question_clear": "문제와 선택지는 명확하고 간결하게 작성되어 있습니다.",
+            "question_unnecessary": "불필요한 정보나 혼란을 주는 표현은 없습니다.",
+            "question_grammar": "문법적 오류나 맞춤법 실수는 없습니다.",
+            "question_structure": "모든 선택지는 문법적 구조와 형식이 유사하게 작성되었습니다."
+        },
+        {
+            "question_concept": "개인정보 보호법에 따른 가명정보의 활용 용도",
+            "question_level": "하",
+            "wrong_answer": false,
+            "multiple_plausible": false,
+            "no_clear_answer": true,
+            "question_clear": "문제와 각 선택지는 명확하고 간결하게 작성되어 있으며, 이해하기 쉽게 구성되어 있습니다.",
+            "question_unnecessary": "불필요한 정보나 혼란을 주는 표현은 없습니다.",
+            "question_grammar": "문법적 오류나 맞춤법 실수는 없습니다.",
+            "question_structure": "모든 선택지는 문법적 구조와 형식이 유사하게 작성되었습니다."
+        }
+    ]
+}
