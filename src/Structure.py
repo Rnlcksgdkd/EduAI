@@ -67,6 +67,7 @@ def init_StateLog():
 ## ✅ 1. 상태 정의 ##
 class State(TypedDict):
 
+
     log_messages : dict = Field(default_factory=lambda : init_StateLog())
 
     ## 노드 정보 ##
@@ -117,6 +118,17 @@ class LogicCheck(BaseModel):
     
     
     # is_confused : bool = Field(description = "혼동되거나 애매하거나 잘못 이해해서 풀 여지가 있는지?")
+
+
+### Solver Agent Output Format ###
+class OutputSolver(BaseModel):
+    
+    choice_1_conf : str = Field(description="첫번째 선택지에 대한 신뢰도")
+    choice_2_conf : str = Field(description="두번째 선택지에 대한 신뢰도")
+    choice_3_conf : str = Field(description="세번째 선택지에 대한 신뢰도")
+    choice_4_conf : str = Field(description="네번째 선택지에 대한 신뢰도")
+    solver_answer : int = Field(description="신뢰도가 제일 높은 선택지" , ge=1 , le=4)
+    solver_solution : str = Field(description="문제에 대한 해설을 명확하고 간결하게 설명해주세요")
 
 
 if __name__ == "__main__":

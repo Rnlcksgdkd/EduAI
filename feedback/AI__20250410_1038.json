@@ -1,0 +1,42 @@
+[
+    {
+        "choice_1_conf": "1",
+        "choice_2_conf": "0",
+        "choice_3_conf": "0",
+        "choice_4_conf": "1",
+        "solver_answer": 4,
+        "solver_solution": "빅데이터의 3V는 규모(Volume), 다양성(Variety), 속도(Velocity)로 구성되어 있습니다. 따라서 정확성(Veracity)과 신뢰성(Reliability)은 3V에 포함되지 않습니다. 신뢰성(Reliability)은 3V에 포함되지 않는 특성으로, 문제에서 물어본 정답이 됩니다."
+    },
+    {
+        "choice_1_conf": "0.3",
+        "choice_2_conf": "1",
+        "choice_3_conf": "0.2",
+        "choice_4_conf": "0.5",
+        "solver_answer": 2,
+        "solver_solution": "빅데이터 분석 기획에서 가장 먼저 해야 할 작업은 해결하려는 문제를 정의하는 것입니다. 이 단계에서 무엇을 분석해야 하고, 어떤 문제를 해결하려는 것인지 명확히 해야 나머지 단계들을 효과적으로 진행할 수 있습니다."
+    },
+    {
+        "choice_1_conf": "0.4",
+        "choice_2_conf": "0.8",
+        "choice_3_conf": "0.6",
+        "choice_4_conf": "0.2",
+        "solver_answer": 2,
+        "solver_solution": "ETL(Extract, Transform, Load) 프로세스는 다양한 소스로부터 데이터를 추출하여 정형화하고, 이를 데이터 웨어하우스나 데이터베이스에 적재하는 과정을 포함합니다. 이 과정은 정형 데이터를 수집하고 처리하는 데 매우 적합한 방법입니다."
+    },
+    {
+        "choice_1_conf": "0",
+        "choice_2_conf": "0",
+        "choice_3_conf": "1",
+        "choice_4_conf": "0",
+        "solver_answer": 3,
+        "solver_solution": "결측값 처리를 할 때 주로 사용하는 방법은 '삭제', '대체(imputation)', '보간' 등이 있습니다. '삭제'는 결측값이 있는 행이나 열을 제거하는 것이고, '대체'는 결측값을 특정 값으로 대체하는 방법이며, '보간'은 주어진 데이터의 패턴을 이용하여 결측값을 추정하여 채우는 것입니다. '무시'는 결측값을 처리하는 방법이라고 보기 어렵습니다. 따라서 '무시'는 결측값 처리 방법이 아닙니다."
+    },
+    {
+        "choice_1_conf": "0",
+        "choice_2_conf": "1",
+        "choice_3_conf": "0",
+        "choice_4_conf": "0",
+        "solver_answer": 2,
+        "solver_solution": "분류 모델의 평가 지표로는 주로 정확도, 정밀도, 재현율과 같은 분류 성능을 측정하는 지표가 사용됩니다. 평균 제곱 오차(MSE)는 회귀 모델의 성능을 평가하는 지표로, 분류 모델의 평가 지표로는 적절하지 않습니다."
+    }
+]
