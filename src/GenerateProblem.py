@@ -226,10 +226,10 @@ if __name__ == "__main__":
     
     ##################### 사용자 입력 #####################
     model_manager = ModelManager(['gpt-4o-mini'])
-    input_file_path = '../docs/빅데이터분석기사.txt'
-    title = "AI"
+    input_file_path = '../docs/온디바이스 AI 기술동향 및 발전방향.pdf'
+    title = "온디바이스 AI 기술동향"
     topic = ""
-    num_question = 5
+    num_question = 10
     rag_option = 1
     ######################################################
     

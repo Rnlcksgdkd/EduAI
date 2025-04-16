@@ -1,17 +1,29 @@
 import streamlit as st
+import os
 import json
 
-# JSON 파일 경로 또는 dict 직접 사용
-with open("../feedback/AI__20250415_1740.json", "r", encoding="utf-8") as f:
+# 📁 JSON 폴더 경로 설정
+FOLDER_PATH = "../feedback"  # 필요 시 변경
+
+# 📑 폴더 내 JSON 파일 목록 가져오기
+json_files = [f for f in os.listdir(FOLDER_PATH) if f.endswith(".json")]
+
+# 📌 Streamlit 페이지 설정
+st.set_page_config(layout="wide")
+st.title("문제 검토 시각화 시스템")
+
+# ⏺ 사이드바 - JSON 파일 선택
+selected_file = st.sidebar.radio("📂 JSON 파일 선택", json_files)
+
+# 선택된 파일 로드
+with open(os.path.join(FOLDER_PATH, selected_file), "r", encoding="utf-8") as f:
     data = json.load(f)
 
 questions = data["Question"]
 solvers = data["Solver"]
 critics = data["Critic"]
 
-st.set_page_config(layout="wide")
-st.title("문제 검토 시각화 시스템")
-
+# ✅ 본문 표시
 for idx in range(len(questions)):
     q = questions[idx]
     s = solvers[idx]
@@ -26,8 +38,13 @@ for idx in range(len(questions)):
         st.markdown(f"**{q['question']}**")
 
         for i in range(1, 5):
-            choice = q[f"choice_{i}"]
-            st.markdown(f"**{i}번.** {choice}")
+            st.markdown(f"**{i}번.** {q[f'choice_{i}']}")
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # ✅ 실제 정답 및 해설
+        st.markdown(f"#### ✅ **정답:** {q['answer']}번")
+        st.markdown(q["solution"])
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -35,7 +52,9 @@ for idx in range(len(questions)):
         score_text = " ".join([
             f"{i}번 ({s.get(f'choice_{i}_conf', '0')})" for i in range(1, 5)
         ])
-        st.markdown(f"#### 🧠 **Solver의 풀이** {score_text}")
+        st.markdown(f"#### 🧠 **Solver 정답 :** {s['solver_answer']}번")
+        st.markdown(f"#### **선택지 신뢰도 :** {score_text}")
+        
         st.markdown(s["solver_solution"])
 
     # 오른쪽 영역 - Critic

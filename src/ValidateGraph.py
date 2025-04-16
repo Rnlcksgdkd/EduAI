@@ -133,17 +133,27 @@ if __name__ == "__main__":
     
     
     ########## 테스트 입력  ##########
-    questionSet_path = '../generate/AI__20250415_1740.json'
+    test_file1 = '빅데이터분석기사.txt'
+    test_file2 = '온디바이스 AI 기술동향.json'
+    questionSet_path = f'../test/{test_file2}'
     ################################
 
 
-    ## 1). 생성한 문제 로드 테스트
+
+    # ## 1). 생성한 문제 로드 테스트
     # with open(questionSet_path, 'r', encoding='utf-8') as f:
     #     questionSet = json.load(f)
-    # print(questionSet)
+    # print("문제셋 로드 완료 : 문제 수 - " , len(questionSet))
+    # print(questionSet[:5])
+
+    import time
+
+    start_time = time.time()
 
     ## 2). 문제 검증 모듈 테스트
     app = validate_module()
     app.invoke( {'questionSet_path' : questionSet_path , 'messages' : {}} )
 
 
+    end_time = time.time()
+    print(f"실행 시간: {end_time - start_time:.4f}초")
